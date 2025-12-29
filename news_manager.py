@@ -45,7 +45,8 @@ class NewsManager:
                 dt = dt.replace(tzinfo=timezone.utc)
             
             now = datetime.now(timezone.utc)
-            return (now - dt) < timedelta(hours=24)
+            # Reduce window to 4 hours to minimize duplicates on server restart (ephemeral FS)
+            return (now - dt) < timedelta(hours=4)
         except Exception as e:
             logger.warning(f"Date parsing failed for {date_str}: {e}")
             return True # Fail open to avoid missing news, ID check captures dupes
