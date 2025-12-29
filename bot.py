@@ -36,8 +36,19 @@ def run_flask():
 
 # --- Command Handlers ---
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test command to check if bot is responsive."""
-    await update.message.reply_text("Bot is alive and running! 🟢\nScheduling is active.")
+    """Test command to check if bot is responsive and config is loaded."""
+    crypto_status = "✅ Configured" if config.TELEGRAM_CRYPTO_CHANNEL_ID else "❌ Missing"
+    stock_status = "✅ Configured" if config.TELEGRAM_STOCK_CHANNEL_ID else "❌ Missing"
+    
+    msg = (
+        f"🤖 **Bot Status**: Online\n"
+        f"📅 **Time**: {utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S')} IST\n\n"
+        f"**Configuration Check**:\n"
+        f"• Crypto Channel: {crypto_status}\n"
+        f"• Stock Channel: {stock_status}\n"
+        f"• Scheduling: Active 🟢"
+    )
+    await update.message.reply_text(msg, parse_mode='Markdown')
 
 # --- Scanning Jobs ---
 async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
