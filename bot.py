@@ -8,7 +8,7 @@ from telegram.ext import Application
 import config
 import market_data
 import signals
-import telegraph_handler # typo in original imports? No, it was telegram_handler
+
 import telegram_handler
 import utils
 import news_manager
