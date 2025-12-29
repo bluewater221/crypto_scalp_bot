@@ -83,10 +83,13 @@ async def check_news(context: ContextTypes.DEFAULT_TYPE):
     logger.info("Checking for NEWS...")
     
     # 1. Stock News
-    if utils.is_market_open('STOCK'):
+    # News can happen anytime, not just during market hours
+    try:
         stock_news = news_service.fetch_stock_news()
         for item in stock_news:
             await telegram_handler.send_news(context.bot, item, 'STOCK')
+    except Exception as e:
+        logger.error(f"Stock news fetch failed: {e}")
             
     # 2. Crypto News (Always open)
     crypto_news = news_service.fetch_crypto_news()
