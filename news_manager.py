@@ -3,13 +3,52 @@ import requests
 import yfinance as yf
 import feedparser
 import config
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import json
+import os
+import dateutil.parser
 
 logger = logging.getLogger(__name__)
 
 class NewsManager:
     def __init__(self):
-        self.seen_news_ids = set()
+        self.seen_file = 'seen_news.json'
+        self.seen_news_ids = self.load_seen_news()
+
+    def load_seen_news(self):
+        if os.path.exists(self.seen_file):
+            try:
+                with open(self.seen_file, 'r') as f:
+                    return set(json.load(f))
+            except Exception as e:
+                logger.error(f"Failed to load seen news: {e}")
+        return set()
+
+    def save_seen_news(self):
+        try:
+            with open(self.seen_file, 'w') as f:
+                json.dump(list(self.seen_news_ids), f)
+        except Exception as e:
+            logger.error(f"Failed to save seen news: {e}")
+
+    def is_recent(self, date_str):
+        """Checks if news is from the last 24 hours."""
+        try:
+            if not date_str: return True # Default to True if no date, but rely on ID check
+            
+            # Auto-parse various formats
+            dt = dateutil.parser.parse(date_str)
+            
+            # Make sure dt is offset-aware usually (or compare naive)
+            # best way: ensure both are UTC if possible
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            
+            now = datetime.now(timezone.utc)
+            return (now - dt) < timedelta(hours=24)
+        except Exception as e:
+            logger.warning(f"Date parsing failed for {date_str}: {e}")
+            return True # Fail open to avoid missing news, ID check captures dupes
 
     def fetch_stock_news(self):
         """Fetches latest news for configured stock symbols using yfinance."""
@@ -54,15 +93,19 @@ class NewsManager:
                         publisher = item.get('provider', {}).get('displayName', 'Yahoo Finance')
 
                     if news_id and news_id not in self.seen_news_ids:
-                        self.seen_news_ids.add(news_id)
-                        news_items.append({
-                            'title': title,
-                            'link': link,
-                            'source': pub_date,
-                            'publisher': publisher,
-                            'type': 'STOCK',
-                            'related_tickers': [symbol]
-                        })
+                        if self.is_recent(pub_date):
+                            self.seen_news_ids.add(news_id)
+                            news_items.append({
+                                'title': title,
+                                'link': link,
+                                'source': pub_date,
+                                'publisher': publisher,
+                                'type': 'STOCK',
+                                'related_tickers': [symbol]
+                            })
+                            try:
+                                self.save_seen_news()
+                            except: pass
         except Exception as e:
             logger.error(f"Error fetching stock news: {e}")
             
@@ -93,18 +136,21 @@ class NewsManager:
                     news_id = str(post['id'])
                     
                     if news_id not in self.seen_news_ids:
-                        self.seen_news_ids.add(news_id)
-                        
-                        # Parse date for potential filtering? (Skipping for now, trust API order)
-                        
-                        news_items.append({
-                            'title': post['title'],
-                            'link': post['url'], # This is CryptoPanic link, usually redirects to source
-                            'source': post['published_at'],
-                            'publisher': post['domain'],
-                            'type': 'CRYPTO',
-                            'currency': post['currencies'][0]['code'] if post.get('currencies') else 'General'
-                        })
+                        pub_date = post.get('published_at')
+                        if self.is_recent(pub_date):
+                            self.seen_news_ids.add(news_id)
+                            
+                            news_items.append({
+                                'title': post['title'],
+                                'link': post['url'], 
+                                'source': pub_date,
+                                'publisher': post['domain'],
+                                'type': 'CRYPTO',
+                                'currency': post['currencies'][0]['code'] if post.get('currencies') else 'General'
+                            })
+                            try:
+                                self.save_seen_news()
+                            except: pass
         except Exception as e:
             logger.error(f"Error fetching crypto news: {e}")
 
@@ -123,26 +169,37 @@ class NewsManager:
                 news_id = entry.id
                 
                 if news_id not in self.seen_news_ids:
-                    self.seen_news_ids.add(news_id)
-                    
-                    # Extract image from media_content or enclosure
-                    image_url = None
-                    if 'media_content' in entry:
-                        image_url = entry.media_content[0]['url']
-                    elif 'links' in entry:
-                        for link in entry.links:
-                            if link.type.startswith('image/'):
-                                image_url = link.href
-                                break
-                    
-                    news_items.append({
-                        'title': entry.title,
-                        'link': entry.link,
-                        'source': datetime(*entry.published_parsed[:6]).strftime("%H:%M"),
-                        'publisher': 'CoinTelegraph Experts',
-                        'type': 'CHART',
-                        'image_url': image_url
-                    })
+                    # Convert struct_time to datetime string for checking
+                    try:
+                        dt = datetime(*entry.published_parsed[:6])
+                        pub_date = dt.isoformat()
+                    except:
+                        pub_date = None
+
+                    if self.is_recent(pub_date):
+                        self.seen_news_ids.add(news_id)
+                        
+                        # Extract image ... (unchanged logic)
+                        image_url = None
+                        if 'media_content' in entry:
+                            image_url = entry.media_content[0]['url']
+                        elif 'links' in entry:
+                            for link in entry.links:
+                                if link.type.startswith('image/'):
+                                    image_url = link.href
+                                    break
+                        
+                        news_items.append({
+                            'title': entry.title,
+                            'link': entry.link,
+                            'source': dt.strftime("%H:%M") if pub_date else "Just Now",
+                            'publisher': 'CoinTelegraph Experts',
+                            'type': 'CHART',
+                            'image_url': image_url
+                        })
+                        try:
+                            self.save_seen_news()
+                        except: pass
         except Exception as e:
             logger.error(f"Error fetching expert analysis: {e}")
             
