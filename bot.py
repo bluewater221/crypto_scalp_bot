@@ -4,7 +4,8 @@ import threading
 import asyncio
 import nest_asyncio
 from flask import Flask
-from telegram.ext import Application, ContextTypes
+from telegram.ext import Application, ContextTypes, CommandHandler
+from telegram import Update
 import config
 import market_data
 import signals
@@ -32,6 +33,11 @@ def ping():
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app_flask.run(host='0.0.0.0', port=port)
+
+# --- Command Handlers ---
+async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Test command to check if bot is responsive."""
+    await update.message.reply_text("Bot is alive and running! 🟢\nScheduling is active.")
 
 # --- Scanning Jobs ---
 async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
@@ -97,30 +103,37 @@ def main():
     """Main Entry Point."""
     logger.info("Starting Unified Scalp Bot...")
 
+    # Check Critical Env Vars
+    if not config.TELEGRAM_BOT_TOKEN:
+        logger.critical("❌ FATAL: TELEGRAM_BOT_TOKEN is missing! Check your environment variables.")
+        return
+
     # 1. Start Flask (Background Thread)
     t_flask = threading.Thread(target=run_flask)
     t_flask.daemon = True
     t_flask.start()
     
     # 2. Initialize Telegram Bot
-    if not config.TELEGRAM_BOT_TOKEN:
-        logger.error("No Telegram Token found!")
-        return
-
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
-    job_queue = application.job_queue
+    
+    # Add Command Handlers
+    application.add_handler(CommandHandler("test", test_command))
 
     # 3. separate jobs
-    logger.info("Starting Scheduler via JobQueue...")
-    
-    # Crypto Scan
-    job_queue.run_repeating(scan_crypto, interval=config.CRYPTO_SCAN_INTERVAL, first=10)
-    
-    # Stock Scan
-    job_queue.run_repeating(scan_stocks, interval=config.STOCK_SCAN_INTERVAL, first=15)
-    
-    # News Check
-    job_queue.run_repeating(check_news, interval=config.NEWS_CHECK_INTERVAL, first=20)
+    job_queue = application.job_queue
+    if job_queue:
+        logger.info("Starting Scheduler via JobQueue...")
+        
+        # Crypto Scan
+        job_queue.run_repeating(scan_crypto, interval=config.CRYPTO_SCAN_INTERVAL, first=10)
+        
+        # Stock Scan
+        job_queue.run_repeating(scan_stocks, interval=config.STOCK_SCAN_INTERVAL, first=15)
+        
+        # News Check
+        job_queue.run_repeating(check_news, interval=config.NEWS_CHECK_INTERVAL, first=20)
+    else:
+        logger.error("❌ JobQueue is not available! Make sure 'python-telegram-bot[job-queue]' is installed.")
 
     # 4. Run Telegram Polling
     logger.info("Bot is running...")

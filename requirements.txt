@@ -1,4 +1,4 @@
-python-telegram-bot>=21.4
+python-telegram-bot[job-queue]>=21.4
 ccxt>=4.0.0
 yfinance>=0.2.40
 mplfinance
@@ -6,7 +6,6 @@ pandas>=2.2.0
 gspread>=6.0.0
 oauth2client
 python-dotenv
-schedule
 Pillow
 flask
 nest_asyncio
