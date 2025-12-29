@@ -1,6 +1,7 @@
 import logging
 import requests
 import yfinance as yf
+import feedparser
 import config
 from datetime import datetime, timedelta
 
@@ -83,3 +84,42 @@ class NewsManager:
             logger.error(f"Error fetching crypto news: {e}")
 
         return news_items
+
+    def fetch_expert_analysis(self):
+        """Fetches 'Price Analysis' from CoinTelegraph RSS."""
+        news_items = []
+        url = "https://cointelegraph.com/rss/tag/price-analysis"
+        
+        try:
+            feed = feedparser.parse(url)
+            
+            # Check top 2 entries
+            for entry in feed.entries[:2]:
+                news_id = entry.id
+                
+                if news_id not in self.seen_news_ids:
+                    self.seen_news_ids.add(news_id)
+                    
+                    # Extract image from media_content or enclosure
+                    image_url = None
+                    if 'media_content' in entry:
+                        image_url = entry.media_content[0]['url']
+                    elif 'links' in entry:
+                        for link in entry.links:
+                            if link.type.startswith('image/'):
+                                image_url = link.href
+                                break
+                    
+                    news_items.append({
+                        'title': entry.title,
+                        'link': entry.link,
+                        'source': datetime(*entry.published_parsed[:6]).strftime("%H:%M"),
+                        'publisher': 'CoinTelegraph Experts',
+                        'type': 'CHART',
+                        'image_url': image_url
+                    })
+        except Exception as e:
+            logger.error(f"Error fetching expert analysis: {e}")
+            
+        return news_items
+

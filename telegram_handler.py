@@ -86,19 +86,37 @@ async def send_news(bot: Bot, news_item, market_type):
     
     emoji = "₿" if market_type == 'CRYPTO' else "📈"
     
-    message = (
-        f"📰 *{market_type} NEWS* {emoji}\n\n"
-        f"**{news_item['title']}**\n"
-        f"_{news_item['publisher']} • {news_item['source']}_\n\n"
-        f"[Read More]({news_item['link']})"
-    )
+    if news_item.get('type') == 'CHART':
+         emoji = "📊"
+         message = (
+            f"📰 *EXPERT CHART ANALYSIS* {emoji}\n\n"
+            f"**{news_item['title']}**\n"
+            f"_{news_item['publisher']} • {news_item['source']}_\n\n"
+            f"[Read Analysis]({news_item['link']})"
+        )
+    else:
+        message = (
+            f"📰 *{market_type} NEWS* {emoji}\n\n"
+            f"**{news_item['title']}**\n"
+            f"_{news_item['publisher']} • {news_item['source']}_\n\n"
+            f"[Read More]({news_item['link']})"
+        )
     
     try:
-        await bot.send_message(
-            chat_id=channel_id, 
-            text=message, 
-            parse_mode='Markdown'
-        )
+        # Check if there is an image to send
+        if news_item.get('image_url'):
+             await bot.send_photo(
+                chat_id=channel_id,
+                photo=news_item['image_url'],
+                caption=message,
+                parse_mode='Markdown'
+            )
+        else:
+            await bot.send_message(
+                chat_id=channel_id, 
+                text=message, 
+                parse_mode='Markdown'
+            )
         logger.info(f"News sent to {market_type}: {news_item['title']}")
     except Exception as e:
         logger.error(f"Failed to send news: {e}")

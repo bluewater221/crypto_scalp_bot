@@ -89,6 +89,11 @@ async def check_news(app):
     for item in crypto_news:
         await telegram_handler.send_news(app.bot, item, 'CRYPTO')
 
+    # 3. Expert Charts (CoinTelegraph RSS)
+    chart_news = news_service.fetch_expert_analysis()
+    for item in chart_news:
+        await telegram_handler.send_news(app.bot, item, 'CRYPTO')
+
 # --- Scheduler ---
 
 def run_scheduler_loop(app):
