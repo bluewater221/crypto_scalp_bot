@@ -25,16 +25,41 @@ class NewsManager:
                 
                 if ticker_news:
                     # Get the most recent article
-                    article = ticker_news[0]
-                    news_id = article.get('uuid')
+                    item = ticker_news[0]
                     
+                    # Handle Nested Structure (New yfinance)
+                    if 'content' in item:
+                        content = item['content']
+                        news_id = item.get('id')
+                        title = content.get('title')
+                        pub_date = content.get('pubDate')
+                        
+                        # Link extraction
+                        link = content.get('canonicalUrl', {}).get('url')
+                        if not link and 'clickThroughUrl' in content:
+                            ctu = content['clickThroughUrl']
+                            if isinstance(ctu, dict):
+                                link = ctu.get('url')
+                            else:
+                                link = ctu
+                                
+                        publisher = content.get('provider', {}).get('displayName', 'Yahoo Finance')
+                        
+                    else:
+                        # Fallback / Old Structure
+                        news_id = item.get('uuid')
+                        title = item.get('title')
+                        link = item.get('link')
+                        pub_date = item.get('providerPublishTime')
+                        publisher = item.get('provider', {}).get('displayName', 'Yahoo Finance')
+
                     if news_id and news_id not in self.seen_news_ids:
                         self.seen_news_ids.add(news_id)
                         news_items.append({
-                            'title': article.get('title'),
-                            'link': article.get('link'),
-                            'source': article.get('providerPublishTime'), # Timestamp
-                            'publisher': article.get('provider', {}).get('displayName', 'Yahoo Finance'),
+                            'title': title,
+                            'link': link,
+                            'source': pub_date,
+                            'publisher': publisher,
                             'type': 'STOCK',
                             'related_tickers': [symbol]
                         })
