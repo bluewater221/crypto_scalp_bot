@@ -8,8 +8,10 @@ from telegram.ext import Application
 import config
 import market_data
 import signals
+import telegraph_handler # typo in original imports? No, it was telegram_handler
 import telegram_handler
 import utils
+import news_manager
 import schedule
 import time
 
@@ -68,7 +70,27 @@ async def scan_stocks(app):
         except Exception as e:
             logger.error(f"Error scanning {symbol}: {e}")
 
+
+# --- News Job ---
+news_service = news_manager.NewsManager()
+
+async def check_news(app):
+    """Checks for news updates."""
+    logger.info("Checking for NEWS...")
+    
+    # 1. Stock News
+    if utils.is_market_open('STOCK'):
+        stock_news = news_service.fetch_stock_news()
+        for item in stock_news:
+            await telegram_handler.send_news(app.bot, item, 'STOCK')
+            
+    # 2. Crypto News (Always open)
+    crypto_news = news_service.fetch_crypto_news()
+    for item in crypto_news:
+        await telegram_handler.send_news(app.bot, item, 'CRYPTO')
+
 # --- Scheduler ---
+
 def run_scheduler_loop(app):
     """Runs the schedule loop."""
     logger.info("Starting Scheduler Loop...")
@@ -79,6 +101,9 @@ def run_scheduler_loop(app):
     )
     schedule.every(config.STOCK_SCAN_INTERVAL // 60).minutes.do(
         lambda: asyncio.run(scan_stocks(app))
+    )
+    schedule.every(config.NEWS_CHECK_INTERVAL // 60).minutes.do(
+        lambda: asyncio.run(check_news(app))
     )
     
     while True:

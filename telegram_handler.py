@@ -69,3 +69,37 @@ async def send_signal(bot: Bot, signal_data, market_type):
 
     except Exception as e:
         logger.error(f"Failed to send Telegram message: {e}")
+
+async def send_news(bot: Bot, news_item, market_type):
+    """
+    Sends a formatted news message to the channel.
+    """
+    channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID if market_type == 'CRYPTO' else config.TELEGRAM_STOCK_CHANNEL_ID
+    
+    if not channel_id:
+        return
+
+    # News Formatting
+    # 📰 MARKET NEWS
+    # Title
+    # Source - Time
+    
+    emoji = "₿" if market_type == 'CRYPTO' else "📈"
+    
+    message = (
+        f"📰 *{market_type} NEWS* {emoji}\n\n"
+        f"**{news_item['title']}**\n"
+        f"_{news_item['publisher']} • {news_item['source']}_\n\n"
+        f"[Read More]({news_item['link']})"
+    )
+    
+    try:
+        await bot.send_message(
+            chat_id=channel_id, 
+            text=message, 
+            parse_mode='Markdown'
+        )
+        logger.info(f"News sent to {market_type}: {news_item['title']}")
+    except Exception as e:
+        logger.error(f"Failed to send news: {e}")
+

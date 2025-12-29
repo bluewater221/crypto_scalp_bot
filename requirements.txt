@@ -11,3 +11,4 @@ Pillow
 flask
 nest_asyncio
 pandas_ta
+requests
