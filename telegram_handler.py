@@ -84,23 +84,44 @@ async def send_news(bot: Bot, news_item, market_type):
     # Title
     # Source - Time
     
+    # Sentiment Emoji Map
+    sentiment = news_item.get('sentiment', {})
+    # Handle if sentiment is a dict (Gemini/TextBlob V2) or string (Legacy)
+    if isinstance(sentiment, dict):
+        sentiment_val = sentiment.get('sentiment', 'NEUTRAL')
+        insight = sentiment.get('ai_insight')
+    else:
+        # Fallback if somehow string
+        sentiment_val = str(sentiment)
+        insight = None
+        
+    s_emoji = "⚪"
+    if sentiment_val == 'BULLISH': s_emoji = "🟢"
+    elif sentiment_val == 'BEARISH': s_emoji = "🔴"
+
     emoji = "₿" if market_type == 'CRYPTO' else "📈"
     
     if news_item.get('type') == 'CHART':
          emoji = "📊"
          message = (
-            f"📰 *EXPERT CHART ANALYSIS* {emoji}\n\n"
+            f"📰 *EXPERT CHART ANALYSIS* {emoji}\n"
+            f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
             f"_{news_item['publisher']} • {news_item['source']}_\n\n"
-            f"[Read Analysis]({news_item['link']})"
         )
     else:
         message = (
-            f"📰 *{market_type} NEWS* {emoji}\n\n"
+            f"📰 *{market_type} NEWS* {emoji}\n"
+            f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
             f"_{news_item['publisher']} • {news_item['source']}_\n\n"
-            f"[Read More]({news_item['link']})"
         )
+
+    # Add AI Insight if available
+    if insight:
+        message += f"{insight}\n\n"
+        
+    message += f"[Read More]({news_item['link']})"
     
     try:
         # Check if there is an image to send

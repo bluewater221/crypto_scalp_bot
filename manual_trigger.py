@@ -82,6 +82,11 @@ async def scan_and_report_news(context):
         print(f"✅ Found {len(s_news)} Stock News items.")
         for item in s_news:
              print(f"   - {item['title']}")
+             sent = item.get('sentiment')
+             if isinstance(sent, dict):
+                 print(f"     🤖 AI: {sent.get('sentiment')} | {sent.get('ai_insight')}")
+             else:
+                 print(f"     Sentiment: {sent}")
              await telegram_handler.send_news(context.bot, item, 'STOCK')
     else:
         print("ℹ️ No Stock News found.")
@@ -93,6 +98,11 @@ async def scan_and_report_news(context):
         print(f"✅ Found {len(c_news)} Crypto News items.")
         for item in c_news:
              print(f"   - {item['title']}")
+             sent = item.get('sentiment')
+             if isinstance(sent, dict):
+                 print(f"     🤖 AI: {sent.get('sentiment')} | {sent.get('ai_insight')}")
+             else:
+                 print(f"     Sentiment: {sent}")
              await telegram_handler.send_news(context.bot, item, 'CRYPTO')
     else:
         print("ℹ️ No Crypto News found (Check API Key).")
@@ -104,6 +114,11 @@ async def scan_and_report_news(context):
         print(f"✅ Found {len(charts)} Chart Analysis items.")
         for item in charts:
              print(f"   - {item['title']}")
+             sent = item.get('sentiment')
+             if isinstance(sent, dict):
+                 print(f"     🤖 AI: {sent.get('sentiment')} | {sent.get('ai_insight')}")
+             else:
+                 print(f"     Sentiment: {sent}")
              await telegram_handler.send_news(context.bot, item, 'CRYPTO')
     else:
         print("ℹ️ No Expert Analysis found.")

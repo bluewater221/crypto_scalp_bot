@@ -12,3 +12,5 @@ nest_asyncio
 pandas_ta
 requests
 feedparser
+textblob
+google-generativeai

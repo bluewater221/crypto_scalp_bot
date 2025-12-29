@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import dateutil.parser
+from textblob import TextBlob
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,18 @@ class NewsManager:
     def __init__(self):
         self.seen_file = 'seen_news.json'
         self.seen_news_ids = self.load_seen_news()
+        
+        # Configure Gemini
+        if config.GEMINI_API_KEY:
+            try:
+                genai.configure(api_key=config.GEMINI_API_KEY)
+                self.model = genai.GenerativeModel('gemini-pro')
+                self.use_ai = True
+            except Exception as e:
+                logger.error(f"Failed to config Gemini: {e}")
+                self.use_ai = False
+        else:
+            self.use_ai = False
 
     def load_seen_news(self):
         if os.path.exists(self.seen_file):
@@ -30,6 +44,51 @@ class NewsManager:
                 json.dump(list(self.seen_news_ids), f)
         except Exception as e:
             logger.error(f"Failed to save seen news: {e}")
+
+    def analyze_sentiment(self, text):
+        """Analyze title sentiment using Gemini AI with TextBlob fallback."""
+        result = {
+            'sentiment': 'NEUTRAL',
+            'score': 0,
+            'ai_insight': None
+        }
+        
+        if not text: return result
+        
+        # 1. Try Gemini AI
+        if self.use_ai:
+            try:
+                prompt = (
+                    f"Analyze this financial news title: '{text}'. "
+                    f"Return ONLY a JSON object with these keys: "
+                    f"sentiment (BULLISH, BEARISH, or NEUTRAL), "
+                    f"price_prediction (e.g., '+2.5%', '-1.0%', '0%'), "
+                    f"reasoning (concise, max 15 words)."
+                )
+                response = self.model.generate_content(prompt)
+                ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
+                
+                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
+                result['ai_insight'] = (
+                    f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
+                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Gemini Analysis failed: {e}")
+                # Fallthrough to TextBlob
+
+        # 2. TextBlob Fallback
+        analysis = TextBlob(text)
+        polarity = analysis.sentiment.polarity
+        result['score'] = polarity
+        
+        if polarity > 0.1:
+            result['sentiment'] = 'BULLISH'
+        elif polarity < -0.1:
+            result['sentiment'] = 'BEARISH'
+        
+        return result
 
     def is_recent(self, date_str):
         """Checks if news is from the last 24 hours."""
@@ -102,7 +161,8 @@ class NewsManager:
                                 'source': pub_date,
                                 'publisher': publisher,
                                 'type': 'STOCK',
-                                'related_tickers': [symbol]
+                                'related_tickers': [symbol],
+                                'sentiment': self.analyze_sentiment(title)
                             })
                             try:
                                 self.save_seen_news()
@@ -147,7 +207,8 @@ class NewsManager:
                                 'source': pub_date,
                                 'publisher': post['domain'],
                                 'type': 'CRYPTO',
-                                'currency': post['currencies'][0]['code'] if post.get('currencies') else 'General'
+                                'currency': post['currencies'][0]['code'] if post.get('currencies') else 'General',
+                                'sentiment': self.analyze_sentiment(post['title'])
                             })
                             try:
                                 self.save_seen_news()
@@ -196,7 +257,8 @@ class NewsManager:
                             'source': dt.strftime("%H:%M") if pub_date else "Just Now",
                             'publisher': 'CoinTelegraph Experts',
                             'type': 'CHART',
-                            'image_url': image_url
+                            'image_url': image_url,
+                            'sentiment': self.analyze_sentiment(entry.title)
                         })
                         try:
                             self.save_seen_news()
