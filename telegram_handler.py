@@ -37,10 +37,19 @@ async def send_signal(bot: Bot, signal_data, market_type):
         f"Entry: {price_fmt.format(signal_data['entry'])} | "
         f"SL: {price_fmt.format(signal_data['stop_loss'])} | "
         f"TP: {price_fmt.format(signal_data['take_profit'])} | "
-        f"Risk: {signal_data['risk_pct']}% | "
+        f"Risk: {signal_data['risk_pct'] * 100}% | "
         f"Setup: {signal_data['setup']}"
-        f"\n\n⚠️ Educational Only. DYOR."
     )
+    
+    # Add AI Validation if present
+    if 'ai_confidence' in signal_data:
+        message += (
+            f"\n\n🧠 **AI Validation**\n"
+            f"Confidence: {signal_data['ai_confidence']}\n"
+            f"Reasoning: _{signal_data['ai_reasoning']}_"
+        )
+        
+    message += f"\n\n⚠️ Educational Only. DYOR."
     
     try:
         # Send Photo with Caption
@@ -110,8 +119,11 @@ async def send_news(bot: Bot, news_item, market_type):
             f"_{news_item['publisher']} • {news_item['source']}_\n\n"
         )
     else:
+        tickers = news_item.get('related_tickers', [])
+        ticker_str = f" ({', '.join(tickers)})" if tickers else ""
+        
         message = (
-            f"📰 *{market_type} NEWS* {emoji}\n"
+            f"📰 *{market_type} NEWS{ticker_str}* {emoji}\n"
             f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
             f"_{news_item['publisher']} • {news_item['source']}_\n\n"

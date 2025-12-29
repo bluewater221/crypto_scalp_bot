@@ -27,6 +27,8 @@ async def scan_and_report_crypto(context):
             signal = await signals.analyze_crypto(exchange, symbol)
             if signal:
                 print(f"✅ SIGNAL FOUND for {symbol}! Sending to Telegram...")
+                if 'ai_confidence' in signal:
+                    print(f"🧠 AI: {signal['ai_confidence']} | {signal['ai_reasoning']}")
                 await telegram_handler.send_signal(context.bot, signal, 'CRYPTO')
                 signals_found += 1
             else:
