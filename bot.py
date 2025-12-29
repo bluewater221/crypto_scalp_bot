@@ -13,6 +13,7 @@ import signals
 import telegram_handler
 import utils
 import news_manager
+import trade_manager
 
 # Apply nest_asyncio to allow nested loops if needed (though PTB handles this well usually)
 nest_asyncio.apply()
@@ -22,6 +23,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Global Services
+news_service = news_manager.NewsManager()
+trade_mgr = trade_manager.TradeManager()
 
 # --- Flask Keep-Alive ---
 app_flask = Flask(__name__)
@@ -35,6 +40,15 @@ def run_flask():
     app_flask.run(host='0.0.0.0', port=port)
 
 # --- Command Handlers ---
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start command."""
+    await update.message.reply_text("🚀 Scalp Bot 2.0 (AI Edition) is running!")
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show performance stats."""
+    stats = trade_mgr.get_stats()
+    await update.message.reply_text(stats, parse_mode='Markdown')
+
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Test command to check if bot is responsive and config is loaded."""
     crypto_status = "✅ Configured" if config.TELEGRAM_CRYPTO_CHANNEL_ID else "❌ Missing"
@@ -59,14 +73,14 @@ async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
 
     logger.info("Scanning CRYPTO...")
     exchange = market_data.get_crypto_exchange()
-    if not exchange:
-        return
+    if not exchange: return
 
     for symbol in config.CRYPTO_PAIRS:
         try:
             signal = await signals.analyze_crypto(exchange, symbol)
             if signal:
                 await telegram_handler.send_signal(context.bot, signal, 'CRYPTO')
+                trade_mgr.open_trade(signal)
         except Exception as e:
             logger.error(f"Error scanning {symbol}: {e}")
 
@@ -82,13 +96,17 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
             signal = await signals.analyze_stock(symbol)
             if signal:
                 await telegram_handler.send_signal(context.bot, signal, 'STOCK')
+                trade_mgr.open_trade(signal)
         except Exception as e:
             logger.error(f"Error scanning {symbol}: {e}")
 
+# --- Trade Manager Job ---
+async def check_trades(context: ContextTypes.DEFAULT_TYPE):
+    """Update active trades."""
+    await trade_mgr.update_trades(context.bot)
 
 # --- News Job ---
-news_service = news_manager.NewsManager()
-
+# news_service is global
 async def check_news(context: ContextTypes.DEFAULT_TYPE):
     """Checks for news updates."""
     logger.info("Checking for NEWS...")
@@ -132,6 +150,8 @@ def main():
     
     # Add Command Handlers
     application.add_handler(CommandHandler("test", test_command))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("start", start_command))
 
     # 3. separate jobs
     job_queue = application.job_queue
@@ -146,6 +166,9 @@ def main():
         
         # News Check
         job_queue.run_repeating(check_news, interval=config.NEWS_CHECK_INTERVAL, first=20)
+        
+        # Trade Manager (New) - Check every 5 minutes
+        job_queue.run_repeating(check_trades, interval=300, first=30)
     else:
         logger.error("❌ JobQueue is not available! Make sure 'python-telegram-bot[job-queue]' is installed.")
 
