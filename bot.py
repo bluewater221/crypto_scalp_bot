@@ -104,14 +104,29 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Try crypto first via CoinGecko, then fall back to stock
     try:
         import requests
-        # CoinGecko accepts symbol search
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd&include_24hr_change=true"
+        
+        # Common coin ID mappings (check these FIRST)
+        common_ids = {
+            'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple',
+            'DOGE': 'dogecoin', 'ADA': 'cardano', 'DOT': 'polkadot', 'MATIC': 'polygon',
+            'BNB': 'binancecoin', 'AVAX': 'avalanche-2', 'LINK': 'chainlink',
+            'UNI': 'uniswap', 'ATOM': 'cosmos', 'LTC': 'litecoin', 'SHIB': 'shiba-inu',
+            'TRX': 'tron', 'NEAR': 'near', 'APT': 'aptos', 'ARB': 'arbitrum', 
+            'OP': 'optimism', 'INJ': 'injective-protocol', 'SUI': 'sui', 'SEI': 'sei-network',
+            'PEPE': 'pepe', 'WIF': 'dogwifcoin', 'BONK': 'bonk', 'FET': 'fetch-ai',
+            'TON': 'the-open-network', 'HBAR': 'hedera-hashgraph', 'ICP': 'internet-computer'
+        }
+        
+        # Use mapping if available, otherwise try symbol as-is
+        coin_id = common_ids.get(symbol, symbol.lower())
+        
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
         resp = await asyncio.to_thread(requests.get, url, timeout=10)
         data = resp.json()
         
-        if symbol.lower() in data:
-            price = data[symbol.lower()]['usd']
-            change = data[symbol.lower()].get('usd_24h_change', 0) or 0
+        if coin_id in data:
+            price = data[coin_id]['usd']
+            change = data[coin_id].get('usd_24h_change', 0) or 0
             emoji = "🟢" if change >= 0 else "🔴"
             msg = (
                 f"💰 **{symbol}/USD**\n\n"
@@ -120,34 +135,6 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(msg, parse_mode='Markdown')
             return
-        
-        # Try with common coin ID mappings
-        common_ids = {
-            'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple',
-            'DOGE': 'dogecoin', 'ADA': 'cardano', 'DOT': 'polkadot', 'MATIC': 'polygon',
-            'BNB': 'binancecoin', 'AVAX': 'avalanche-2', 'LINK': 'chainlink',
-            'UNI': 'uniswap', 'ATOM': 'cosmos', 'LTC': 'litecoin', 'SHIB': 'shiba-inu',
-            'TRX': 'tron', 'NEAR': 'near', 'APT': 'aptos', 'ARB': 'arbitrum', 
-            'OP': 'optimism', 'INJ': 'injective-protocol', 'SUI': 'sui', 'SEI': 'sei-network'
-        }
-        
-        if symbol in common_ids:
-            coin_id = common_ids[symbol]
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
-            resp = await asyncio.to_thread(requests.get, url, timeout=10)
-            data = resp.json()
-            
-            if coin_id in data:
-                price = data[coin_id]['usd']
-                change = data[coin_id].get('usd_24h_change', 0) or 0
-                emoji = "🟢" if change >= 0 else "🔴"
-                msg = (
-                    f"💰 **{symbol}/USD**\n\n"
-                    f"Price: ${price:,.2f}\n"
-                    f"24h Change: {emoji} {change:+.2f}%"
-                )
-                await update.message.reply_text(msg, parse_mode='Markdown')
-                return
         
         # Not found as crypto, try as Indian stock
         await fetch_stock_price(update, f"{symbol}.NS")
