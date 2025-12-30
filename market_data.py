@@ -10,13 +10,12 @@ logger = logging.getLogger(__name__)
 
 # --- Exchange Setup ---
 def get_crypto_exchange():
-    """Initialize the Binance exchange."""
+    """Initialize the Bybit exchange (public data, no API key needed)."""
     try:
-        exchange = ccxt.binance({
-            'apiKey': config.BINANCE_API_KEY,
-            'secret': config.BINANCE_SECRET_KEY,
-            'options': {'defaultType': 'future'},
-            'enableRateLimit': True
+        # Using Bybit instead of Binance - works globally without API restrictions
+        exchange = ccxt.bybit({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'spot'}  # Use spot for simple price data
         })
         return exchange
     except Exception as e:
