@@ -70,6 +70,96 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg, parse_mode='Markdown')
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show all available commands."""
+    msg = (
+        "🤖 **Scalp Bot Commands**\n\n"
+        "📊 **Market Data**\n"
+        "/price <symbol> - Get current price\n"
+        "  _Examples: /price BTC, /price RELIANCE_\n\n"
+        "📰 **News**\n"
+        "/news - Get latest market news now\n\n"
+        "📈 **Trading**\n"
+        "/stats - View performance stats\n"
+        "/test - Check bot status\n\n"
+        "🔧 **Utility**\n"
+        "/id - Get chat ID\n"
+        "/help - Show this message"
+    )
+    await update.effective_message.reply_text(msg, parse_mode='Markdown')
+
+async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get current price for a crypto or stock symbol."""
+    if not context.args:
+        await update.message.reply_text("Usage: /price <symbol>\nExamples: /price BTC, /price RELIANCE")
+        return
+    
+    symbol = context.args[0].upper()
+    
+    try:
+        # Check if it's a crypto symbol
+        if symbol in ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC']:
+            exchange = market_data.get_crypto_exchange()
+            if exchange:
+                ticker = await asyncio.to_thread(exchange.fetch_ticker, f"{symbol}/USDT")
+                price = ticker['last']
+                change = ticker.get('percentage', 0) or 0
+                emoji = "🟢" if change >= 0 else "🔴"
+                msg = (
+                    f"💰 **{symbol}/USDT**\n\n"
+                    f"Price: ${price:,.2f}\n"
+                    f"24h Change: {emoji} {change:+.2f}%"
+                )
+            else:
+                msg = "❌ Exchange not available"
+        else:
+            # Assume it's a stock - add .NS if not present
+            stock_symbol = symbol if '.' in symbol else f"{symbol}.NS"
+            import yfinance as yf
+            ticker = yf.Ticker(stock_symbol)
+            info = ticker.fast_info
+            price = info.last_price
+            prev_close = info.previous_close
+            change = ((price - prev_close) / prev_close) * 100 if prev_close else 0
+            emoji = "🟢" if change >= 0 else "🔴"
+            msg = (
+                f"📈 **{stock_symbol}**\n\n"
+                f"Price: ₹{price:,.2f}\n"
+                f"Change: {emoji} {change:+.2f}%"
+            )
+        
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error fetching price for {symbol}: {e}")
+        await update.message.reply_text(f"❌ Could not fetch price for {symbol}")
+
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manually trigger news fetch and send to user."""
+    await update.message.reply_text("📰 Fetching latest news...")
+    
+    try:
+        # Fetch news
+        stock_news = news_service.fetch_stock_news()
+        crypto_news = news_service.fetch_crypto_news()
+        
+        total = len(stock_news) + len(crypto_news)
+        
+        if total == 0:
+            await update.message.reply_text("No new news found. Check back later!")
+        else:
+            # Send news to channels
+            for item in stock_news:
+                await telegram_handler.send_news(context.bot, item, 'STOCK')
+            for item in crypto_news:
+                await telegram_handler.send_news(context.bot, item, 'CRYPTO')
+            
+            await update.message.reply_text(f"✅ Sent {total} news items to channels!")
+            
+    except Exception as e:
+        logger.error(f"Error in news command: {e}")
+        await update.message.reply_text(f"❌ Error fetching news: {str(e)}")
+
 # --- Scanning Jobs ---
 async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
     """Scan Crypto Markets."""
@@ -159,6 +249,9 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("id", id_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("price", price_command))
+    application.add_handler(CommandHandler("news", news_command))
 
     # 3. separate jobs
     job_queue = application.job_queue

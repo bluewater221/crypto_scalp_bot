@@ -104,8 +104,13 @@ class NewsManager:
                 dt = dt.replace(tzinfo=timezone.utc)
             
             now = datetime.now(timezone.utc)
-            # Reduce window to 4 hours to minimize duplicates on server restart (ephemeral FS)
-            return (now - dt) < timedelta(hours=4)
+            # Relaxed window to 24 hours to ensure daily news catches are not missed
+            is_recent = (now - dt) < timedelta(hours=24)
+            
+            if not is_recent:
+                logger.debug(f"Skipping old news: {date_str} ({(now - dt).total_seconds()/3600:.1f}h old)")
+                
+            return is_recent
         except Exception as e:
             logger.warning(f"Date parsing failed for {date_str}: {e}")
             return True # Fail open to avoid missing news, ID check captures dupes
