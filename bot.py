@@ -98,20 +98,46 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Check if it's a crypto symbol
-        if symbol in ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC']:
-            exchange = market_data.get_crypto_exchange()
-            if exchange:
-                ticker = await asyncio.to_thread(exchange.fetch_ticker, f"{symbol}/USDT")
-                price = ticker['last']
-                change = ticker.get('percentage', 0) or 0
-                emoji = "🟢" if change >= 0 else "🔴"
-                msg = (
-                    f"💰 **{symbol}/USDT**\n\n"
-                    f"Price: ${price:,.2f}\n"
-                    f"24h Change: {emoji} {change:+.2f}%"
-                )
-            else:
-                msg = "❌ Exchange not available"
+        if symbol in ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'BNB', 'AVAX']:
+            # Try using ccxt with Bybit
+            try:
+                exchange = market_data.get_crypto_exchange()
+                if exchange:
+                    # Load markets first
+                    await asyncio.to_thread(exchange.load_markets)
+                    ticker = await asyncio.to_thread(exchange.fetch_ticker, f"{symbol}/USDT")
+                    price = ticker['last']
+                    change = ticker.get('percentage', 0) or 0
+                    emoji = "🟢" if change >= 0 else "🔴"
+                    msg = (
+                        f"💰 **{symbol}/USDT**\n\n"
+                        f"Price: ${price:,.2f}\n"
+                        f"24h Change: {emoji} {change:+.2f}%"
+                    )
+                else:
+                    raise Exception("Exchange not available")
+            except Exception as e:
+                logger.warning(f"Bybit failed for {symbol}: {e}, trying CoinGecko...")
+                # Fallback to CoinGecko API
+                import requests
+                coin_ids = {'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple', 
+                           'DOGE': 'dogecoin', 'ADA': 'cardano', 'DOT': 'polkadot', 'MATIC': 'polygon',
+                           'BNB': 'binancecoin', 'AVAX': 'avalanche-2'}
+                coin_id = coin_ids.get(symbol, symbol.lower())
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
+                resp = await asyncio.to_thread(requests.get, url, timeout=10)
+                data = resp.json()
+                if coin_id in data:
+                    price = data[coin_id]['usd']
+                    change = data[coin_id].get('usd_24h_change', 0) or 0
+                    emoji = "🟢" if change >= 0 else "🔴"
+                    msg = (
+                        f"💰 **{symbol}/USD**\n\n"
+                        f"Price: ${price:,.2f}\n"
+                        f"24h Change: {emoji} {change:+.2f}%"
+                    )
+                else:
+                    msg = f"❌ Could not fetch price for {symbol}"
         else:
             # Assume it's a stock - add .NS if not present
             stock_symbol = symbol if '.' in symbol else f"{symbol}.NS"
