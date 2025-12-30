@@ -42,7 +42,7 @@ CRYPTO_RISK_PER_TRADE = 0.5 # 0.5%
 # --- Stock Configuration (Indian Markets) ---
 # NIFTY500 or selected highly liquid stocks. 
 # For demo, using a small list of liquid reliable stocks.
-STOCK_SYMBOLS = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS', 'TATAMOTORS.NS'] 
+STOCK_SYMBOLS = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS'] 
 STOCK_TIMEFRAME = '5m'
 STOCK_SCAN_INTERVAL = 600 # 10 minutes
 STOCK_MARKET_OPEN_HOUR = 9
