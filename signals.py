@@ -138,13 +138,18 @@ async def analyze_stock(symbol):
     
     # EMA Cross: 9 crosses above 21
     # Check if EMA9 > EMA21 NOW and EMA9 <= EMA21 BEFORE
-    ema_fast_curr = curr['ema_fast']
-    ema_slow_curr = curr['ema_slow']
-    ema_fast_prev = prev['ema_fast']
-    ema_slow_prev = prev['ema_slow']
+    ema_fast_curr = curr.get('ema_fast')
+    ema_slow_curr = curr.get('ema_slow')
+    ema_fast_prev = prev.get('ema_fast')
+    ema_slow_prev = prev.get('ema_slow')
     
-    vol_curr = curr['volume']
-    vol_avg = curr['vol_avg']
+    vol_curr = curr.get('volume')
+    vol_avg = curr.get('vol_avg')
+    
+    # Check for None/NaN values before comparison
+    if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [ema_fast_curr, ema_slow_curr, ema_fast_prev, ema_slow_prev, vol_curr, vol_avg]):
+        logger.debug(f"Skipping {symbol}: Missing indicator values")
+        return None
     
     signal = None
     setup_type = ""
