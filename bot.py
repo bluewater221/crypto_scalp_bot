@@ -48,7 +48,7 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Returns the Chat ID of the current chat."""
     chat_id = update.effective_chat.id
     title = update.effective_chat.title or "Private Chat"
-    await update.message.reply_text(f"🆔 **Chat ID**: `{chat_id}`\nTitle: {title}", parse_mode='Markdown')
+    await update.effective_message.reply_text(f"🆔 **Chat ID**: `{chat_id}`\nTitle: {title}", parse_mode='Markdown')
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show performance stats."""
