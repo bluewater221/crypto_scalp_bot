@@ -42,7 +42,13 @@ def run_flask():
 # --- Command Handlers ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command."""
-    await update.message.reply_text("🚀 Scalp Bot 2.0 (AI Edition) is running!")
+    await update.message.reply_text("🚀 Scalp Bot 2.0 (AI Edition) is active!")
+
+async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Returns the Chat ID of the current chat."""
+    chat_id = update.effective_chat.id
+    title = update.effective_chat.title or "Private Chat"
+    await update.message.reply_text(f"🆔 **Chat ID**: `{chat_id}`\nTitle: {title}", parse_mode='Markdown')
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show performance stats."""
@@ -152,6 +158,7 @@ def main():
     application.add_handler(CommandHandler("test", test_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("id", id_command))
 
     # 3. separate jobs
     job_queue = application.job_queue
