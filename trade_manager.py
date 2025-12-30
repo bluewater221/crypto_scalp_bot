@@ -113,9 +113,14 @@ class TradeManager:
             f"PnL: {pnl_pct*100:.2f}%\n"
             f"Close: {close_price}"
         )
-        channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID if trade['market'] == 'CRYPTO' else config.TELEGRAM_STOCK_CHANNEL_ID
+        
+        # Route to Log Channel (Private)
+        channel_id = config.TELEGRAM_LOG_CHANNEL_ID
+        
         if channel_id:
              asyncio.create_task(bot.send_message(chat_id=channel_id, text=msg, parse_mode='Markdown'))
+        else:
+             logger.info(f"Trade Closed ({outcome}): {trade['symbol']} (Log Channel not set)")
 
     def get_stats(self):
         if not self.history:

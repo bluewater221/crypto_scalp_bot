@@ -13,6 +13,7 @@ PAPER_TRADING = os.getenv('PAPER_TRADING', 'True').lower() == 'true'
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CRYPTO_CHANNEL_ID = os.getenv('TELEGRAM_CRYPTO_CHANNEL_ID') # @cryptoscalp
 TELEGRAM_STOCK_CHANNEL_ID = os.getenv('TELEGRAM_STOCK_CHANNEL_ID')   # @stockscalp
+TELEGRAM_LOG_CHANNEL_ID = os.getenv('TELEGRAM_LOG_CHANNEL_ID')       # @scalper_logs (Optional)
 CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
