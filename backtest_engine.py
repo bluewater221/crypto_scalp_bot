@@ -6,7 +6,7 @@ import yfinance as yf
 import config
 import signals
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,7 +21,7 @@ async def fetch_historical_crypto(symbol, limit_days=BACKTEST_DAYS):
     """Fetches historical OHLCV data for Crypto from Kraken."""
     exchange = ccxt.kraken()
     try:
-        since = exchange.parse8601((datetime.utcnow() - timedelta(days=limit_days)).isoformat())
+        since = exchange.parse8601((datetime.now(timezone.utc) - timedelta(days=limit_days)).isoformat())
         ohlcv = await exchange.fetch_ohlcv(symbol, CRYPTO_TIMEFRAME, since)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')

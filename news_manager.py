@@ -9,7 +9,7 @@ import json
 import os
 import dateutil.parser
 from textblob import TextBlob
-import google.generativeai as genai
+from google import genai
 import market_data
 
 logger = logging.getLogger(__name__)
@@ -19,17 +19,15 @@ class NewsManager:
         self.seen_file = 'seen_news.json'
         self.seen_news_ids = self.load_seen_news()
         
-        # Configure Gemini
+        # Configure Gemini (New SDK)
+        self.client = None
+        self.use_ai = False
         if config.GEMINI_API_KEY:
             try:
-                genai.configure(api_key=config.GEMINI_API_KEY)
-                self.model = genai.GenerativeModel('gemini-pro')
+                self.client = genai.Client(api_key=config.GEMINI_API_KEY)
                 self.use_ai = True
             except Exception as e:
                 logger.error(f"Failed to config Gemini: {e}")
-                self.use_ai = False
-        else:
-            self.use_ai = False
 
     def load_seen_news(self):
         if os.path.exists(self.seen_file):
@@ -80,7 +78,7 @@ class NewsManager:
                     f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']), "
                     f"is_india_macro (boolean: true if news is about Indian Economy, Bonds, RBI, Rupee, or broad India market. False for specific company news)."
                 )
-                response = self.model.generate_content(prompt)
+                response = self.client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
                 ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
                 
                 result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')

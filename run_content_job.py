@@ -5,7 +5,7 @@ from telegram import Bot
 import config
 import news_manager
 import telegram_handler
-from datetime import datetime
+from datetime import datetime, timezone
 import market_data
 
 # Configure Logging
@@ -48,7 +48,7 @@ async def main():
         # 4. Market Pulse Summary (Morning Check)
         # Check if it's "Morning" in IST (approx 08:00 - 09:00 IST)
         # Github runs UTC. 03:00 UTC is 08:30 IST.
-        now_hour = datetime.utcnow().hour
+        now_hour = datetime.now(timezone.utc).hour
         if 2 <= now_hour <= 4: # Run between 7:30 AM and 9:30 AM IST
             logger.info("Sending Daily Market Pulse...")
             

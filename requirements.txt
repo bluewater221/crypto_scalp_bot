@@ -13,6 +13,6 @@ pandas_ta
 requests
 feedparser
 textblob
-google-generativeai
+google-genai>=0.4.0
 kiteconnect
 lxml>=4.9.0

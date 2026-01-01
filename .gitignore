@@ -4,3 +4,8 @@ __pycache__/
 .env
 charts/
 credentials.json
+google_creds.json
+_dev/
+backtest_results.csv
+ids.txt
+*.pyc

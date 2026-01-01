@@ -1,31 +1,44 @@
-# Unified Crypto & Stock Scalping Bot
+# 🤖 Crypto & Stock Scalping Bot
 
-A Telegram bot that scans:
-- **Crypto**: Binance Futures (BTC/USDT, ETH/USDT) via RSI Scalping Strategy (9AM-11PM IST).
-- **Stocks**: Indian Markets (NSE/BSE) via EMA Crossover Strategy (9:15AM-3:30PM IST).
+An AI-powered trading bot that scans Indian stocks (NSE) and Crypto markets for scalping opportunities.
 
-**Features:**
-- Dual Channel Posting (`@cryptoscalp`, `@stockscalp`).
-- Automated Chart Generation (Candlesticks with indicators).
-- Risk Management (0.5% Rule).
-- Google Sheets Logging.
-- Render.com Ready (Web Service with Keep-Alive).
+## Features
+- **Multi-Market**: NSE Stocks (5-minute) and Crypto (1-minute) scalping
+- **AI Validation**: Uses Google Gemini for signal confidence scoring
+- **News Intelligence**: Curated news with sentiment analysis
+- **Airdrop Alerts**: Smart filtering for quality crypto airdrops
+- **Charts**: Auto-generated technical analysis charts
+- **Persistent Memory**: Google Sheets for trade history
 
-## Deployment
+## Architecture
+| Component | Platform | Duty |
+|---|---|---|
+| **Trader** | Render | 24/7 Signal Scanning, Commands |
+| **Analyst** | GitHub Actions | Periodic News, Airdrops, Market Pulse |
 
-### 1. Render.com (One-Click)
+## Quick Start
+1. Clone this repository
+2. Copy `.env.example` to `.env` and fill in credentials
+3. `pip install -r requirements.txt`
+4. `python bot.py`
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+## Commands
+| Command | Description |
+|---|---|
+| `/stats` | Show trading statistics and balance |
+| `/market` | Show market sentiment (Fear & Greed, Nifty trend) |
+| `/news` | Manually trigger news fetch |
+| `/airdrops` | Manually trigger airdrop fetch |
 
-**Env Vars Required:**
-- `TELEGRAM_BOT_TOKEN`: Your Bot Token
-- `TELEGRAM_CRYPTO_CHANNEL_ID`: Channel ID (e.g. @cryptoscalp)
-- `TELEGRAM_STOCK_CHANNEL_ID`: Channel ID (e.g. @stockscalp)
-- `BINANCE_API_KEY` & `BINANCE_SECRET_KEY`: (Optional for Paper Trading, Required for Real)
-- `PAPER_TRADING`: `True`
-
-### 2. Local Run
-```bash
-pip install -r requirements.txt
-python bot.py
+## Environment Variables
 ```
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CRYPTO_CHANNEL_ID=-100xxxxxxxxxx
+TELEGRAM_STOCK_CHANNEL_ID=-100xxxxxxxxxx
+GEMINI_API_KEY=your_gemini_key
+CRYPTOPANIC_API_KEY=your_cryptopanic_key
+GOOGLE_SHEETS_CREDENTIALS_JSON={"type":"service_account"...}
+```
+
+## License
+MIT

@@ -6,25 +6,31 @@ import config
 import market_data
 import utils
 import sheets
-import google.generativeai as genai
+from google import genai
 import json
 import os
 
 logger = logging.getLogger(__name__)
 
+# Initialize Gemini Client (Singleton)
+_genai_client = None
+def get_genai_client():
+    global _genai_client
+    if _genai_client is None and config.GEMINI_API_KEY:
+        _genai_client = genai.Client(api_key=config.GEMINI_API_KEY)
+    return _genai_client
+
 async def validate_with_ai(symbol, market_type, signal, setup, df):
     """
     Asks Gemini to validate the technical signal.
     """
-    if not config.GEMINI_API_KEY:
+    client = get_genai_client()
+    if not client:
         return {'confidence': 'N/A', 'reasoning': 'AI Key missing'}
 
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-pro')
-            
             # Prepare Technical Context (Last 5 candles)
             recent_data = df.tail(5).to_string()
             
@@ -42,7 +48,11 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
             )
             
             # Run in thread to not block async loop
-            response = await asyncio.to_thread(model.generate_content, prompt)
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model='gemini-2.0-flash',
+                contents=prompt
+            )
             
             # Clean JSON
             raw_text = response.text.replace('```json', '').replace('```', '').strip()
@@ -185,23 +195,6 @@ async def analyze_stock(symbol, df=None):
     if df is None:
         df = await market_data.fetch_stock_data(symbol)
     if df is None or df.empty: return None
-        
-    df = market_data.calculate_indicators_stock(df)
-    
-    # Need enough data for checks
-    # ... (rest of logic same until AI check)
-    
-    # (Skiplines... I need to target the end of the function)
-    
-    # ...
-    
-    # ...
-    
-    # ... (Wait, I cannot skip lines in replace_file_content efficiently if I don't know exact content)
-    # I will replace the whole function block or use the AI skip check location.
-    
-    # I will target the end of analyze_stock (Checking original file content lines 255+)
-
         
     df = market_data.calculate_indicators_stock(df)
     
