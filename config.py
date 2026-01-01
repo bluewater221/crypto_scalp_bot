@@ -43,10 +43,19 @@ CRYPTO_RISK_PER_TRADE = 0.5 # 0.5%
 # NIFTY500 or selected highly liquid stocks. 
 # For demo, using a small list of liquid reliable stocks.
 STOCK_SYMBOLS = [
+    # --- Major Stocks ---
     'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS',
     'AXISBANK.NS', 'KOTAKBANK.NS', 'LT.NS', 'HUL.NS', 'ITC.NS', 'BAJFINANCE.NS', 
-    'MARUTI.NS', 'TATAMOTORS.NS', 'GOLDBEES.NS', 'SILVERBEES.NS', 'NIFTYBEES.NS', 
-    'BANKBEES.NS', 'LIQUIDBEES.NS'
+    'MARUTI.NS', 'TATAMOTORS.NS',
+    
+    # --- Index ETFs ---
+    'NIFTYBEES.NS', 'BANKBEES.NS', 'JUNIORBEES.NS', 'MID150BEES.NS', 'CPSEETF.NS',
+    
+    # --- Sectoral ETFs ---
+    'ITBEES.NS', 'PHARMABEES.NS', 'PSUBANKBES.NS', 'AUTOBEES.NS', 'INFRABEES.NS',
+    
+    # --- Commodity & International ETFs ---
+    'GOLDBEES.NS', 'SILVERBEES.NS', 'MON100.NS', 'MAFANG.NS'
 ] 
 STOCK_TIMEFRAME = '5m'
 STOCK_SCAN_INTERVAL = 300 # 5 minutes
