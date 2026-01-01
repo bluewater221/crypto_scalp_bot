@@ -46,12 +46,13 @@ class NewsManager:
         except Exception as e:
             logger.error(f"Failed to save seen news: {e}")
 
-    def analyze_sentiment(self, text, description=None):
+    def analyze_sentiment(self, text, description=None, check_cost=False):
         """Analyze title and description sentiment using Gemini AI with TextBlob fallback."""
         result = {
             'sentiment': 'NEUTRAL',
             'score': 0,
-            'ai_insight': None
+            'ai_insight': None,
+            'low_cost': True # Default to True (pass) if not checked
         }
         
         full_text = f"{text}. {description}" if description else text
@@ -60,12 +61,17 @@ class NewsManager:
         # 1. Try Gemini AI
         if self.use_ai:
             try:
+                cost_prompt = ""
+                if check_cost:
+                    cost_prompt = "low_cost (boolean: true if free or < 5 USDT cost, false if expensive), "
+
                 prompt = (
                     f"Analyze this financial news:\nTitle: '{text}'\nDescription: '{description}'\n"
                     f"Return ONLY a JSON object with these keys: "
                     f"sentiment (BULLISH, BEARISH, or NEUTRAL), "
                     f"price_prediction (e.g., '+2.5%', '-1.0%', '0%'), "
                     f"reasoning (concise, max 15 words), "
+                    f"{cost_prompt}"
                     f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']). "
                     f"If no specific company, return empty list."
                 )
@@ -78,12 +84,14 @@ class NewsManager:
                     f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
                 )
                 result['companies'] = ai_data.get('companies', [])
+                if check_cost:
+                    result['low_cost'] = ai_data.get('low_cost', True) 
                 return result
 
             except Exception as e:
                 logger.error(f"Gemini Analysis failed: {e}")
                 # Fallthrough to TextBlob
-
+ 
         # 2. TextBlob Fallback
         analysis = TextBlob(text)
         polarity = analysis.sentiment.polarity
@@ -312,7 +320,22 @@ class NewsManager:
                             'source': datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                             'publisher': 'AirdropAlert',
                             'type': 'AIRDROP',
-                            'sentiment': self.analyze_sentiment(entry.title, summary)
+                        # Analyze Sentiment & Check Cost
+                        analysis_result = self.analyze_sentiment(entry.title, summary, check_cost=True)
+                        
+                        # Filter out expensive airdrops (> 5 USDT)
+                        if not analysis_result.get('low_cost', True):
+                             logger.info(f"Skipping expensive airdrop: {entry.title}")
+                             continue
+
+                        airdrops.append({
+                            'title': entry.title,
+                            'summary': summary[:150] + "..." if len(summary) > 150 else summary,
+                            'link': entry.link,
+                            'source': datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                            'publisher': 'AirdropAlert',
+                            'type': 'AIRDROP',
+                            'sentiment': analysis_result
                         })
                         try:
                             self.save_seen_news()
