@@ -31,7 +31,9 @@ async def send_signal(bot: Bot, signal_data, market_type):
     # Format Message
     # Standardized Template (Like Stock)
     emoji = "🚀" if signal_data['side'] == 'LONG' else "📉"
-    price_fmt = "${:,.2f}" if market_type == 'CRYPTO' else "₹{:,.2f}"
+    
+    # Use higher precision for Crypto to avoid "0.00" issues with cheap coins
+    price_fmt = "${:,.6f}" if market_type == 'CRYPTO' else "₹{:,.2f}"
     
     # Unified Template Structure
     message = (
@@ -145,6 +147,15 @@ async def send_news(bot: Bot, news_item, market_type):
             f"{news_item.get('summary', '')}\n\n"
         )
 
+        # Add Forex Context if present (Smart Context)
+        if 'usdinr_data' in news_item:
+            usdinr = news_item['usdinr_data']
+            # USD/INR: Up means INR Weakens (Red for INR holder typically, but standard Green for price up)
+            # Let's keep it neutral/descriptive
+            message += (
+                f"🇮🇳 **USD/INR**: ₹{usdinr['price']:,.2f} ({usdinr['pct_change']:+.2f}%) - {usdinr['trend']}\n\n"
+            )
+
     # Add AI Insight if available
     if insight:
         message += f"{insight}\n\n"
@@ -202,7 +213,8 @@ async def send_airdrop(bot: Bot, airdrop_item):
     message = (
         f"🪂 *NEW AIRDROP OPPORTUNITY* 🪂\n"
         f"Potential: {s_emoji} {sentiment_val}\n"
-        f"Value: 💰 **{sentiment.get('estimated_value', 'Unknown')}**\n\n"
+        f"Value: 💰 **{sentiment.get('estimated_value', 'Unknown')}**\n"
+        f"Requirements: 📋 **{sentiment.get('requirements', 'None')}**\n\n"
         f"**{airdrop_item['title']}**\n"
     )
 

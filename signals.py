@@ -19,54 +19,65 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
     if not config.GEMINI_API_KEY:
         return {'confidence': 'N/A', 'reasoning': 'AI Key missing'}
 
-    try:
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-pro')
-        
-        # Prepare Technical Context (Last 5 candles)
-        recent_data = df.tail(5).to_string()
-        
-        prompt = (
-            f"Act as a Senior Trading Analyst. Validate this scalping signal:\n"
-            f"Asset: {symbol} ({market_type})\n"
-            f"Signal: {signal}\n"
-            f"Setup: {setup}\n\n"
-            f"Recent Price Action (OHLCV + Indicators):\n{recent_data}\n\n"
-            f"Analyze the Trend, Momentum (RSI), and Volume profile.\n"
-            f"Return ONLY a JSON object with keys:\n"
-            f"- confidence (0-100 score, integer)\n"
-            f"- reasoning (concise explanation, max 20 words)\n"
-            f"- verdict (APPROVED or REJECTED)"
-        )
-        
-        # Run in thread to not block async loop
-        response = await asyncio.to_thread(model.generate_content, prompt)
-        
-        # Clean JSON
-        raw_text = response.text.replace('```json', '').replace('```', '').strip()
-        data = json.loads(raw_text)
-        
-        return {
-            'confidence': f"{data.get('confidence', 0)}%",
-            'reasoning': data.get('reasoning', 'No reasoning'),
-            'verdict': data.get('verdict', 'APPROVED') # Default to approve if unsure
-        }
-        
-    except Exception as e:
-        logger.error(f"AI Validation Failed: {e}")
-        return {'confidence': 'Error', 'reasoning': 'AI Unresponsive', 'verdict': 'APPROVED'}
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            model = genai.GenerativeModel('gemini-pro')
+            
+            # Prepare Technical Context (Last 5 candles)
+            recent_data = df.tail(5).to_string()
+            
+            prompt = (
+                f"Act as a Senior Trading Analyst. Validate this scalping signal:\n"
+                f"Asset: {symbol} ({market_type})\n"
+                f"Signal: {signal}\n"
+                f"Setup: {setup}\n\n"
+                f"Recent Price Action (OHLCV + Indicators):\n{recent_data}\n\n"
+                f"Analyze the Trend, Momentum (RSI), and Volume profile.\n"
+                f"Return ONLY a JSON object with keys:\n"
+                f"- confidence (0-100 score, integer)\n"
+                f"- reasoning (concise explanation, max 20 words)\n"
+                f"- verdict (APPROVED or REJECTED)"
+            )
+            
+            # Run in thread to not block async loop
+            response = await asyncio.to_thread(model.generate_content, prompt)
+            
+            # Clean JSON
+            raw_text = response.text.replace('```json', '').replace('```', '').strip()
+            data = json.loads(raw_text)
+            
+            return {
+                'confidence': f"{data.get('confidence', 0)}%",
+                'reasoning': data.get('reasoning', 'No reasoning'),
+                'verdict': data.get('verdict', 'APPROVED') # Default to approve if unsure
+            }
+            
+        except Exception as e:
+            logger.warning(f"AI Attempt {attempt+1}/{max_retries} Failed: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2) # Backoff
+            else:
+                logger.error(f"AI Validation Failed after retries: {e}")
+                
+    # Fallback after retries (Don't block the trade, just warn)
+    return {'confidence': 'Error', 'reasoning': 'AI Unresponsive', 'verdict': 'APPROVED'}
 
 
-async def analyze_crypto(exchange, symbol):
+async def analyze_crypto(exchange, symbol, df_1m=None, df_5m=None):
     """
     Analyzes a crypto symbol for RSI scalping signals (Strict 1m Scalp).
+    Accepts optional DataFrames for backtesting.
     """
     # 1. Fetch 1m Data (Execution Timeframe)
-    df_1m = await market_data.fetch_crypto_ohlcv(exchange, symbol, timeframe='1m')
+    if df_1m is None:
+        df_1m = await market_data.fetch_crypto_ohlcv(exchange, symbol, timeframe='1m')
     if df_1m is None or df_1m.empty: return None
 
     # 2. Fetch 5m Data (HTF Trend Filter)
-    df_5m = await market_data.fetch_crypto_ohlcv(exchange, symbol, timeframe='5m')
+    if df_5m is None:
+        df_5m = await market_data.fetch_crypto_ohlcv(exchange, symbol, timeframe='5m')
     if df_5m is None or df_5m.empty: return None
 
     # Indicators
@@ -121,6 +132,23 @@ async def analyze_crypto(exchange, symbol):
                 take_profit = entry_price * (1 - 0.005)
 
     if signal:
+        # Check if Backtesting (exchange is None) to skip AI
+        if exchange is None:
+             return {
+                'market': 'CRYPTO',
+                'symbol': symbol,
+                'side': signal,
+                'entry': entry_price,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'setup': setup_type,
+                'risk_pct': config.CRYPTO_RISK_PER_TRADE,
+                'timestamp': utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S'),
+                'ai_confidence': 'Backtest',
+                'ai_reasoning': 'N/A',
+                'df': None # Don't pass full DF to sheets to save space/time in backtest
+             }
+
         # AI Validation
         ai_data = await validate_with_ai(symbol, 'CRYPTO', signal, setup_type, df_1m)
         
@@ -147,12 +175,33 @@ async def analyze_crypto(exchange, symbol):
     
     return None
 
-async def analyze_stock(symbol):
+async def analyze_stock(symbol, df=None):
     """
     Analyzes a stock symbol with STRICT 5-Shield Logic.
+    Accepts optional DataFrame for backtesting.
     """
-    df = await market_data.fetch_stock_data(symbol)
+    is_backtest = df is not None
+
+    if df is None:
+        df = await market_data.fetch_stock_data(symbol)
     if df is None or df.empty: return None
+        
+    df = market_data.calculate_indicators_stock(df)
+    
+    # Need enough data for checks
+    # ... (rest of logic same until AI check)
+    
+    # (Skiplines... I need to target the end of the function)
+    
+    # ...
+    
+    # ...
+    
+    # ... (Wait, I cannot skip lines in replace_file_content efficiently if I don't know exact content)
+    # I will replace the whole function block or use the AI skip check location.
+    
+    # I will target the end of analyze_stock (Checking original file content lines 255+)
+
         
     df = market_data.calculate_indicators_stock(df)
     
@@ -245,6 +294,22 @@ async def analyze_stock(symbol):
 
     
     if signal:
+        if is_backtest:
+             return {
+                'market': 'STOCK',
+                'symbol': symbol,
+                'side': signal,
+                'entry': entry_price,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'setup': setup_type,
+                'risk_pct': config.STOCK_RISK_PER_TRADE,
+                'timestamp': utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S'),
+                'ai_confidence': 'Backtest',
+                'ai_reasoning': 'N/A',
+                'df': None
+            }
+
         # AI Validation
         ai_data = await validate_with_ai(symbol, 'STOCK', signal, setup_type, df)
         

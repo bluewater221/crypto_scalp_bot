@@ -1,0 +1,2 @@
+entry_time,symbol,side,entry_price,sl,tp,setup,exit_time,outcome,pnl_pct,exit_price
+2026-01-01 11:17:00,SOL/USDT,LONG,125.04,124.66488000000001,125.6652,RSI Reversal (w/ 5m Trend),2026-01-01 14:27:00,STOP_LOSS,-0.2999999999999964,124.66488000000001

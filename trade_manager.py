@@ -4,7 +4,9 @@ import os
 from datetime import datetime
 import market_data
 import config
+import config
 import asyncio
+import sheets
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +16,14 @@ HISTORY_FILE = "trade_history.json"
 class TradeManager:
     def __init__(self):
         self.active_trades = self.load_trades(TRADES_FILE)
-        self.history = self.load_trades(HISTORY_FILE)
+        
+        # Try to restore history from Google Sheets (Persistent Storage)
+        sheet_history = sheets.fetch_trade_history()
+        if sheet_history:
+            self.history = sheet_history
+            logging.info(f"✅ Restored {len(self.history)} trades from Google Sheets.")
+        else:
+            self.history = self.load_trades(HISTORY_FILE)
 
     def load_trades(self, filename):
         if os.path.exists(filename):
@@ -104,6 +113,9 @@ class TradeManager:
         self.active_trades.remove(trade)
         self.history.append(trade)
         self.save_trades()
+        
+        # Sync to Persistent Storage
+        sheets.log_closed_trade(trade)
         
         # Send Alert
         emoji = "✅" if outcome == 'WIN' else "❌"

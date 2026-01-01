@@ -7,6 +7,7 @@ import logging
 import asyncio
 import kite_auth
 import nse_client
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,79 @@ def calculate_indicators_stock(df):
         df['vol_avg'] = ta.sma(df['volume'], length=20)
         
         return df
+        return df
     except Exception as e:
         logger.error(f"Error calculating Stock Indicators: {e}")
         return df
+
+# --- Market Pulse (Free APIs) ---
+def get_fear_and_greed_index():
+    """Fetches Crypto Fear & Greed Index from Alternative.me."""
+    try:
+        url = "https://api.alternative.me/fng/?limit=1"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            item = data['data'][0]
+            return {
+                'value': int(item['value']),
+                'value_classification': item['value_classification']
+            }
+    except Exception as e:
+        logger.error(f"Error fetching Fear & Greed Index: {e}")
+    return {'value': 0, 'value_classification': 'Unknown'}
+
+async def get_market_status():
+    """Fetches Nifty 50 Trend from Yahoo Finance."""
+    try:
+        # Run in thread as yfinance can be blocking
+        ticker = await asyncio.to_thread(yf.Ticker, "^NSEI")
+        hist = await asyncio.to_thread(ticker.history, period="1d")
+        
+        if not hist.empty:
+            last_close = float(hist["Close"].iloc[-1])
+            open_price = float(hist["Open"].iloc[-1])
+            
+            change = last_close - open_price
+            pct_change = (change / open_price) * 100
+            
+            trend = "BULLISH" if change > 0 else "BEARISH"
+            
+            return {
+                'symbol': 'NIFTY 50',
+                'price': last_close,
+                'change': change,
+                'pct_change': pct_change,
+                'trend': trend
+            }
+    except Exception as e:
+        logger.error(f"Error fetching Market Status: {e}")
+    
+    return None
+
+async def get_usdinr_status():
+    """Fetches USD/INR Price & Trend from Yahoo Finance."""
+    try:
+        # Run in thread as yfinance can be blocking
+        ticker = await asyncio.to_thread(yf.Ticker, "INR=X")
+        hist = await asyncio.to_thread(ticker.history, period="1d")
+        
+        if not hist.empty:
+            last_close = float(hist["Close"].iloc[-1])
+            open_price = float(hist["Open"].iloc[-1])
+            
+            change = last_close - open_price
+            pct_change = (change / open_price) * 100
+            
+            trend = "Appreciating" if change < 0 else "Depreciating" # INR vs USD
+            
+            return {
+                'price': last_close,
+                'change': change,
+                'pct_change': pct_change,
+                'trend': trend
+            }
+    except Exception as e:
+        logger.error(f"Error fetching USD/INR: {e}")
+    
+    return None

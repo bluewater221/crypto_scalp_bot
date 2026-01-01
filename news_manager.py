@@ -10,6 +10,7 @@ import os
 import dateutil.parser
 from textblob import TextBlob
 import google.generativeai as genai
+import market_data
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,9 @@ class NewsManager:
                     f"reasoning (concise, max 15 words), "
                     f"{cost_prompt}"
                     f"estimated_value (short string estimate of potential value in USDT, e.g. '$10-$50', 'High', 'Unknown'), "
-                    f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']). "
-                    f"If no specific company, return empty list."
+                    f"requirements (short list of key actions/requirements, e.g. 'Connect Wallet, Follow X, Bridge ETH'), "
+                    f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']), "
+                    f"is_india_macro (boolean: true if news is about Indian Economy, Bonds, RBI, Rupee, or broad India market. False for specific company news)."
                 )
                 response = self.model.generate_content(prompt)
                 ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
@@ -87,11 +89,14 @@ class NewsManager:
                     f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
                 )
                 result['companies'] = ai_data.get('companies', [])
+                result['is_india_macro'] = ai_data.get('is_india_macro', False)
+
                 if check_cost:
                     result['low_cost'] = ai_data.get('low_cost', True)
                     result['requires_premium_x'] = ai_data.get('requires_premium_x', False)
                     result['is_telegram_app'] = ai_data.get('is_telegram_app', False)
                     result['estimated_value'] = ai_data.get('estimated_value', 'Unknown')
+                    result['requirements'] = ai_data.get('requirements', 'None mentioned')
                 return result
 
             except Exception as e:
@@ -162,7 +167,7 @@ class NewsManager:
                         # Analyze Sentiment & Extract Tickers
                         analysis_result = self.analyze_sentiment(entry.title, summary)
                         
-                        news_items.append({
+                        news_item = {
                             'title': entry.title,
                             'summary': summary[:800] + "..." if len(summary) > 800 else summary, 
                             'link': entry.link,
@@ -171,7 +176,15 @@ class NewsManager:
                             'type': 'STOCK',
                             'sentiment': analysis_result,
                             'related_tickers': analysis_result.get('companies', [])
-                        })
+                        }
+                        
+                        # Add Forex Context if India Macro News
+                        if analysis_result.get('is_india_macro', False):
+                            usdinr = await market_data.get_usdinr_status()
+                            if usdinr:
+                                news_item['usdinr_data'] = usdinr
+                                
+                        news_items.append(news_item)
                         try:
                             self.save_seen_news()
                         except: pass

@@ -45,3 +45,77 @@ def log_signal(signal_data):
         logger.info(f"Signal logged to Sheets: {signal_data['symbol']}")
     except Exception as e:
         logger.error(f"Failed to log to Sheet: {e}")
+
+def log_closed_trade(trade_data):
+    """Logs a closed trade to the 'History' worksheet."""
+    client = get_gspread_client()
+    if not client: return
+
+    try:
+        # Open or Create 'History' worksheet
+        sh = client.open(config.GOOGLE_SHEET_NAME)
+        try:
+            sheet = sh.worksheet("History")
+        except:
+            sheet = sh.add_worksheet(title="History", rows="1000", cols="20")
+            # Add Header
+            sheet.append_row(["ID", "Symbol", "Market", "Side", "Outcome", "PnL%", "Entry", "SL", "TP", "Close Price", "Risk%", "Open Time", "Close Time"])
+        
+        row = [
+            trade_data.get('id', ''),
+            trade_data.get('symbol', ''),
+            trade_data.get('market', ''),
+            trade_data.get('side', ''),
+            trade_data.get('outcome', ''),
+            trade_data.get('pnl_pct', 0),
+            trade_data.get('entry', 0),
+            trade_data.get('sl', 0),
+            trade_data.get('tp', 0),
+            trade_data.get('close_price', 0),
+            trade_data.get('risk_pct', 0.005),
+            trade_data.get('open_time', ''),
+            trade_data.get('close_time', '')
+        ]
+        sheet.append_row(row)
+        logger.info(f"Closed Trade logged to Sheets: {trade_data['symbol']}")
+    except Exception as e:
+        logger.error(f"Failed to log closed trade to Sheet: {e}")
+
+def fetch_trade_history():
+    """Fetches all closed trades from 'History' sheet to restore balance."""
+    client = get_gspread_client()
+    if not client: return []
+
+    try:
+        sh = client.open(config.GOOGLE_SHEET_NAME)
+        try:
+            sheet = sh.worksheet("History")
+        except:
+            return [] # No history yet
+
+        records = sheet.get_all_records()
+        # Convert PnL/Numbers back to proper types if needed
+        # gspread get_all_records returns a list of dicts
+        cleaned_records = []
+        for r in records:
+            # Ensure PnL is float
+            try:
+                r['pnl_pct'] = float(r['Pct']) if 'Pct' in r else (float(r['PnL%']) if 'PnL%' in r else 0.0)
+                r['entry'] = float(r['Entry'])
+                r['sl'] = float(r['SL'])
+                r['close_price'] = float(r['Close Price'])
+                r['risk_pct'] = float(r['Risk%']) if 'Risk%' in r else 0.005
+                
+                # Normalize keys to match trade_manager expectation (lowercase)
+                r['market'] = r['Market']
+                r['side'] = r['Side']
+                r['outcome'] = r['Outcome']
+                r['symbol'] = r['Symbol']
+            except:
+                pass
+            cleaned_records.append(r)
+            
+        return cleaned_records
+    except Exception as e:
+        logger.error(f"Failed to fetch trade history: {e}")
+        return []

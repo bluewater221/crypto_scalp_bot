@@ -2,7 +2,7 @@ name: Run Crypto Scalp Bot
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Run every 30 minutes
+    - cron: '0 */4 * * *' # Run every 4 hours (Analyst Job)
   workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
           echo "No Google Sheets Secret found. Skipping."
         fi
 
-    - name: Run Bot Scanner
+    - name: Run Content Job (Analyst)
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CRYPTO_CHANNEL_ID: ${{ secrets.TELEGRAM_CRYPTO_CHANNEL_ID }}
@@ -45,4 +45,4 @@ jobs:
         CRYPTOPANIC_API_KEY: ${{ secrets.CRYPTOPANIC_API_KEY }}
         PAPER_TRADING: "True"
       run: |
-        python run_once.py
+        python run_content_job.py

@@ -266,6 +266,49 @@ async def airdrops_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in airdrops command: {e}")
         await update.message.reply_text(f"❌ Error fetching airdrops: {str(e)}")
 
+async def market_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show global market sentiment."""
+    await update.message.reply_text("🏥 Checking Market Pulse...")
+    
+    try:
+        # 1. Crypto Sentiment
+        fng = market_data.get_fear_and_greed_index()
+        fng_val = fng.get('value', 0)
+        fng_class = fng.get('value_classification', 'Unknown')
+        
+        # Color coding for F&G
+        fng_emoji = "😐"
+        if fng_val >= 75: fng_emoji = "🤑" # Extreme Greed
+        elif fng_val >= 55: fng_emoji = "🙂" # Greed
+        elif fng_val <= 25: fng_emoji = "😨" # Extreme Fear
+        elif fng_val <= 45: fng_emoji = "😟" # Fear
+        
+        # 2. Stock Market Trend (Nifty 50)
+        nifty = await market_data.get_market_status()
+        nifty_msg = "🇮🇳 **Nifty 50**: N/A"
+        
+        if nifty:
+            trend_emoji = "🟢" if nifty['trend'] == 'BULLISH' else "🔴"
+            nifty_msg = (
+                f"🇮🇳 **Nifty 50**: {trend_emoji} {nifty['trend']}\n"
+                f"Price: {nifty['price']:,.2f} ({nifty['pct_change']:+.2f}%)"
+            )
+            
+        # 3. Construct Message
+        msg = (
+            f"🏥 **Market Pulse**\n\n"
+            f"{nifty_msg}\n\n"
+            f"₿ **Crypto Sentiment**\n"
+            f"{fng_emoji} **{fng_class}** ({fng_val}/100)\n"
+            f"Ref: Alternative.me"
+        )
+        
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in market command: {e}")
+        await update.message.reply_text("❌ Failed to fetch market data.")
+
 # --- Scanning Jobs ---
 async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
     """Scan Crypto Markets."""
@@ -368,6 +411,7 @@ def main():
     application.add_handler(CommandHandler("price", price_command))
     application.add_handler(CommandHandler("news", news_command))
     application.add_handler(CommandHandler("airdrops", airdrops_command))
+    application.add_handler(CommandHandler("market", market_command))
 
 
     # 3. separate jobs
@@ -381,11 +425,9 @@ def main():
         # Stock Scan
         job_queue.run_repeating(scan_stocks, interval=config.STOCK_SCAN_INTERVAL, first=15)
         
-        # News Check
-        job_queue.run_repeating(check_news, interval=config.NEWS_CHECK_INTERVAL, first=20)
-        
-        # Airdrop Check
-        job_queue.run_repeating(check_airdrops, interval=config.AIRDROP_CHECK_INTERVAL, first=30)
+        # News & Airdrops -> Moved to GitHub Actions (run_content_job.py)
+        # job_queue.run_repeating(news_job, interval=config.NEWS_CHECK_INTERVAL, first=30)
+        # job_queue.run_repeating(airdrop_job, interval=config.AIRDROP_CHECK_INTERVAL, first=60)
         
         # Trade Manager (New) - Check every 5 minutes
         job_queue.run_repeating(check_trades, interval=300, first=40)
