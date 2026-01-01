@@ -38,8 +38,11 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CRYPTO_CHANNEL_ID: ${{ secrets.TELEGRAM_CRYPTO_CHANNEL_ID }}
         TELEGRAM_STOCK_CHANNEL_ID: ${{ secrets.TELEGRAM_STOCK_CHANNEL_ID }}
+        TELEGRAM_CRYPTO_PNL_CHANNEL_ID: ${{ secrets.TELEGRAM_CRYPTO_PNL_CHANNEL_ID }}
+        TELEGRAM_STOCK_PNL_CHANNEL_ID: ${{ secrets.TELEGRAM_STOCK_PNL_CHANNEL_ID }}
         GOOGLE_SHEETS_CREDENTIALS_JSON: "google_creds.json"
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        CRYPTOPANIC_API_KEY: ${{ secrets.CRYPTOPANIC_API_KEY }}
         PAPER_TRADING: "True"
       run: |
         python run_once.py
