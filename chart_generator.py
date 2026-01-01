@@ -24,8 +24,7 @@ def generate_chart(df, symbol, timeframe, signal_side):
         chart_df = chart_df.tail(200) # Increased to 200
         
         # Setup Style
-        mc = mpf.make_marketcolors(up='green', down='red', inherit=True)
-        s = mpf.make_mpf_style(marketcolors=mc, style='nightclouds')
+        # Custom style lines removed to prevent keyword error. Using built-in style directly.
         
         filename = f"{CHART_DIR}/{symbol.replace('/', '_')}_{signal_side}.png"
         
@@ -55,12 +54,32 @@ def generate_chart(df, symbol, timeframe, signal_side):
             addplots.append(mpf.make_addplot(line_30, panel=1, color='gray', linestyle='dotted', width=0.8))
             addplots.append(mpf.make_addplot(line_70, panel=1, color='gray', linestyle='dotted', width=0.8))
 
+        # 4. Signal Marker (Arrow)
+        # We place a marker on the LAST candle because that's where the signal was generated
+        if len(chart_df) > 0:
+            last_idx = chart_df.index[-1]
+            
+            # Create a Series relative to the dataframe index, full of NaNs
+            marker_series = [float('nan')] * len(chart_df)
+            
+            if signal_side == 'LONG':
+                # Green Arrow UP below the Low
+                marker_price = chart_df.iloc[-1]['low'] * 0.999
+                marker_series[-1] = marker_price
+                addplots.append(mpf.make_addplot(marker_series, type='scatter', markersize=200, marker='^', color='lime'))
+                
+            elif signal_side == 'SHORT':
+                # Red Arrow DOWN above the High
+                marker_price = chart_df.iloc[-1]['high'] * 1.001
+                marker_series[-1] = marker_price
+                addplots.append(mpf.make_addplot(marker_series, type='scatter', markersize=200, marker='v', color='red'))
+
         title = f"{symbol} ({timeframe}) - {signal_side} Setup"
         
         mpf.plot(
             chart_df,
             type='candle',
-            style=s,
+            style='nightclouds', # Use standard style name directly to avoid custom object errors
             title=title,
             volume=True,
             addplot=addplots,

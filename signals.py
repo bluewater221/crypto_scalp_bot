@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import pandas as pd
+import pandas_ta as ta
 import config
 import market_data
 import utils
@@ -58,40 +59,70 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
 
 async def analyze_crypto(exchange, symbol):
     """
-    Analyzes a crypto symbol for RSI scalping signals.
+    Analyzes a crypto symbol for RSI scalping signals (Strict 1m Scalp).
     """
-    df = await market_data.fetch_crypto_ohlcv(exchange, symbol)
-    if df is None or df.empty:
-        return None
+    # 1. Fetch 1m Data (Execution Timeframe)
+    df_1m = await market_data.fetch_crypto_ohlcv(exchange, symbol, timeframe='1m')
+    if df_1m is None or df_1m.empty: return None
+
+    # 2. Fetch 5m Data (HTF Trend Filter)
+    df_5m = await market_data.fetch_crypto_ohlcv(exchange, symbol, timeframe='5m')
+    if df_5m is None or df_5m.empty: return None
+
+    # Indicators
+    df_1m = market_data.calculate_indicators_crypto(df_1m)
+    # Need EMA for 1m and 5m
+    df_1m['ema_20'] = ta.ema(df_1m['close'], length=20)
     
-    df = market_data.calculate_indicators_crypto(df)
-    if 'rsi' not in df.columns:
-        return None
-        
-    latest = df.iloc[-1]
-    rsi = latest['rsi']
-    close_price = latest['close']
+    df_5m['ema_20'] = ta.ema(df_5m['close'], length=20)
+    df_5m['ema_50'] = ta.ema(df_5m['close'], length=50)
+
+    # Latest Values
+    curr_1m = df_1m.iloc[-1]
+    prev_1m = df_1m.iloc[-2]
     
+    curr_5m = df_5m.iloc[-1]
+    
+    # --- HTF TREND FILTER (5m) ---
+    trend_5m = 'BULLISH' if curr_5m['ema_20'] > curr_5m['ema_50'] else 'BEARISH'
+
     signal = None
     setup_type = ""
+    entry_price = curr_1m['close']
     
-    if rsi < config.RSI_OVERSOLD:
-        signal = 'LONG'
-        setup_type = f'RSI Oversold ({rsi:.1f})'
-        entry_price = close_price
-        stop_loss = entry_price * (1 - config.CRYPTO_STOP_LOSS)
-        take_profit = entry_price * (1 + config.CRYPTO_TAKE_PROFIT)
-        
-    elif rsi > config.RSI_OVERBOUGHT:
-        signal = 'SHORT'
-        setup_type = f'RSI Overbought ({rsi:.1f})'
-        entry_price = close_price
-        stop_loss = entry_price * (1 + config.CRYPTO_STOP_LOSS)
-        take_profit = entry_price * (1 - config.CRYPTO_TAKE_PROFIT)
+    # Calculate Crypto Volume Average (20 period)
+    vol_avg = df_1m['volume'].rolling(window=20).mean().iloc[-1]
+    vol_curr = curr_1m['volume']
+    
+    # Volume Check (Mandatory for both)
+    # Volume > 1.2x Average
+    volume_ok = vol_curr > (1.2 * vol_avg)
+
+    # --- LONG LOGIC ---
+    if trend_5m == 'BULLISH' and volume_ok:
+        # 1. RSI Crosses back ABOVE 30
+        if prev_1m['rsi'] < 30 and curr_1m['rsi'] >= 30:
+            # 2. Price > 1m EMA 20
+            if entry_price > curr_1m['ema_20']:
+                signal = 'LONG'
+                setup_type = 'RSI Reversal (w/ 5m Trend)'
+                stop_loss = entry_price * (1 - 0.003) # 0.3% Fixed
+                take_profit = entry_price * (1 + 0.005) # 0.5% Target
+
+    # --- SHORT LOGIC ---
+    elif trend_5m == 'BEARISH' and volume_ok:
+        # 1. RSI Crosses back BELOW 70
+        if prev_1m['rsi'] > 70 and curr_1m['rsi'] <= 70:
+            # 2. Price < 1m EMA 20
+            if entry_price < curr_1m['ema_20']:
+                signal = 'SHORT'
+                setup_type = 'RSI Reversal (w/ 5m Trend)'
+                stop_loss = entry_price * (1 + 0.003)
+                take_profit = entry_price * (1 - 0.005)
 
     if signal:
         # AI Validation
-        ai_data = await validate_with_ai(symbol, 'CRYPTO', signal, setup_type, df)
+        ai_data = await validate_with_ai(symbol, 'CRYPTO', signal, setup_type, df_1m)
         
         if ai_data.get('verdict') == 'REJECTED':
             logger.info(f"🚫 AI Rejected Signal for {symbol}: {ai_data['reasoning']}")
@@ -109,9 +140,8 @@ async def analyze_crypto(exchange, symbol):
             'timestamp': utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S'),
             'ai_confidence': ai_data['confidence'],
             'ai_reasoning': ai_data['reasoning'],
-            'df': df  # Pass dataframe for chart generation
+            'df': df_1m 
         }
-        # Log to Sheets
         sheets.log_signal(signal_data)
         return signal_data
     
@@ -119,50 +149,100 @@ async def analyze_crypto(exchange, symbol):
 
 async def analyze_stock(symbol):
     """
-    Analyzes a stock symbol for EMA Crossover + Volume.
+    Analyzes a stock symbol with STRICT 5-Shield Logic.
     """
     df = await market_data.fetch_stock_data(symbol)
-    if df is None or df.empty:
-        return None
+    if df is None or df.empty: return None
         
     df = market_data.calculate_indicators_stock(df)
     
-    # Need at least 2 rows for crossover check
-    if len(df) < 2:
-        return None
+    # Need enough data for checks
+    if len(df) < 20: return None
         
     curr = df.iloc[-1]
     prev = df.iloc[-2]
     
     close_price = curr['close']
     
-    # EMA Cross: 9 crosses above 21
-    # Check if EMA9 > EMA21 NOW and EMA9 <= EMA21 BEFORE
-    ema_fast_curr = curr.get('ema_fast')
-    ema_slow_curr = curr.get('ema_slow')
-    ema_fast_prev = prev.get('ema_fast')
-    ema_slow_prev = prev.get('ema_slow')
+    # Extract Indicators
+    ema_fast = curr.get('ema_fast')
+    ema_slow = curr.get('ema_slow')
+    ema_trend = curr.get('ema_trend')
+    ema_slope = curr.get('ema_trend_slope', 0)
+    adx = curr.get('adx', 0)
+    # Check ADX Rising: ADX[now] > ADX[prev] > ADX[prev-1]
+    adx_prev = prev.get('adx', 0)
     
+    rsi = curr.get('rsi')
     vol_curr = curr.get('volume')
     vol_avg = curr.get('vol_avg')
+    vol_prev = prev.get('volume')
     
-    # Check for None/NaN values before comparison
-    if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [ema_fast_curr, ema_slow_curr, ema_fast_prev, ema_slow_prev, vol_curr, vol_avg]):
-        logger.debug(f"Skipping {symbol}: Missing indicator values")
+    # Validate Data Availability
+    vals_to_check = [ema_fast, ema_slow, ema_trend, rsi, vol_curr, vol_avg]
+    if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in vals_to_check):
         return None
     
     signal = None
     setup_type = ""
     
-    # Long Condition
-    if (ema_fast_curr > ema_slow_curr) and (ema_fast_prev <= ema_slow_prev):
-        # Volume Confirmation (> 2x Average)
-        if vol_curr > (2 * vol_avg):
-            signal = 'LONG' # Stocks usually Long only for Spot/Cash unless Intraday Equity? Assuming Intraday.
-            setup_type = 'EMA Cross + Vol Spike'
+    # --- STRICT ENTRY CONDITIONS (LONG ONLY) ---
+    
+    # SHIELD 1: Momentum Signal (Primary)
+    # EMA 9 Cross Above 21 (Golden Cross)
+    cross_signal = (ema_fast > ema_slow) and (prev['ema_fast'] <= prev['ema_slow'])
+    
+    # Separation Check: EMA difference > X% of Price (Avoid noise)
+    separation = (ema_fast - ema_slow) / close_price
+    has_separation = separation >= config.EMA_CROSS_THRESHOLD
+    
+    # Candle must close above BOTH EMAs
+    closes_above_emas = (close_price > ema_fast) and (close_price > ema_slow)
+    
+    if cross_signal and has_separation and closes_above_emas:
+        
+        # SHIELD 2: Trend
+        # Price > EMA 50 AND EMA 50 Slope is Positive
+        trend_ok = (close_price > ema_trend) and (ema_slope > 0)
+        
+        # SHIELD 3: Strength
+        # ADX > 20 AND Rising AND < 40
+        strength_ok = (adx > config.ADX_MIN) and (adx > adx_prev) and (adx < config.ADX_MAX)
+        
+        # SHIELD 4: Safety (Momentum Zone)
+        # RSI between 45 and 65
+        momentum_ok = (rsi >= config.RSI_MIN) and (rsi <= config.RSI_MAX)
+        
+        # SHIELD 5: Volume Confirmation
+        # Vol > 1.2x Avg AND Vol > Prev Vol
+        volume_ok = (vol_curr > (1.2 * vol_avg)) and (vol_curr > vol_prev)
+        
+        if trend_ok and strength_ok and momentum_ok and volume_ok:
+            signal = 'LONG'
+            setup_type = f'5-Shield Sniper (ADX:{adx:.1f} RSI:{rsi:.1f})'
             entry_price = close_price
-            stop_loss = entry_price * (1 - config.STOCK_STOP_LOSS)
-            take_profit = entry_price * (1 + config.STOCK_TAKE_PROFIT)
+            
+            # Auto Stop Loss logic: Tighter of (21 EMA - 0.05%) OR Fixed %
+            # Prompt Reqs: "Tighter of Recent Swing Low or 21 EMA - 0.05%"
+            # Implementing 21 EMA SL logic
+            sl_ema = ema_slow * (1 - 0.0005) # 21 EMA - 0.05%
+            sl_fixed = entry_price * (1 - config.STOCK_STOP_LOSS)
+            
+            # Use the higher value (tighter SL for Longs)
+            stop_loss = max(sl_ema, sl_fixed)
+            
+            # Target: 1.5R Minimum
+            risk = entry_price - stop_loss
+            take_profit = entry_price + (1.5 * risk)
+        else:
+            # Log specific rejections for debugging loop
+            reasons = []
+            if not trend_ok: reasons.append("Trend/Slope")
+            if not strength_ok: reasons.append("ADX")
+            if not momentum_ok: reasons.append("RSI")
+            if not volume_ok: reasons.append("Volume")
+            logger.debug(f"{symbol} Signal REJECTED. Shields failed: {', '.join(reasons)}")
+
     
     if signal:
         # AI Validation
@@ -171,7 +251,7 @@ async def analyze_stock(symbol):
         if ai_data.get('verdict') == 'REJECTED':
             logger.info(f"🚫 AI Rejected Signal for {symbol}: {ai_data['reasoning']}")
             return None
-
+        
         signal_data = {
             'market': 'STOCK',
             'symbol': symbol,

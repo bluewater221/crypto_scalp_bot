@@ -28,7 +28,7 @@ BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
 
 CRYPTO_PAIRS = ['BTC/USDT', 'ETH/USDT']
 CRYPTO_TIMEFRAME = '1m' # Using 1m data for calculation
-CRYPTO_SCAN_INTERVAL = 900 # 15 minutes
+CRYPTO_SCAN_INTERVAL = 60 # 1 minute
 CRYPTO_MARKET_OPEN = 9
 CRYPTO_MARKET_CLOSE = 23
 
@@ -43,21 +43,38 @@ CRYPTO_RISK_PER_TRADE = 0.5 # 0.5%
 # --- Stock Configuration (Indian Markets) ---
 # NIFTY500 or selected highly liquid stocks. 
 # For demo, using a small list of liquid reliable stocks.
-STOCK_SYMBOLS = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS'] 
+STOCK_SYMBOLS = [
+    'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS',
+    'GOLDBEES.NS', 'SILVERBEES.NS', 'NIFTYBEES.NS', 'BANKBEES.NS', 'LIQUIDBEES.NS'
+] 
 STOCK_TIMEFRAME = '5m'
-STOCK_SCAN_INTERVAL = 600 # 10 minutes
+STOCK_SCAN_INTERVAL = 300 # 5 minutes
 STOCK_MARKET_OPEN_HOUR = 9
-STOCK_MARKET_OPEN_MINUTE = 15
-STOCK_MARKET_CLOSE_HOUR = 15
-STOCK_MARKET_CLOSE_MINUTE = 30
+STOCK_MARKET_OPEN_MINUTE = 25 # Start 9:25 AM (Avoid opening chaos)
+STOCK_MARKET_CLOSE_HOUR = 14
+STOCK_MARKET_CLOSE_MINUTE = 45 # Stop 2:45 PM (Avoid intraday square-off chaos)
+
 
 # Stock Strategy (EMA Cross)
 EMA_FAST = 9
 EMA_SLOW = 21
 STOCK_STOP_LOSS = 0.005
-STOCK_TAKE_PROFIT = 0.01
+STOCK_TAKE_PROFIT = 0.015 # 1.5R Minimum
 STOCK_RISK_PER_TRADE = 0.5 
 
-# --- News Configuration ---
+# Strict Strategy Constants
+EMA_CROSS_THRESHOLD = 0.001 # 0.1% separation
+ADX_MIN = 20
+ADX_MAX = 40
+RSI_MIN = 45
+RSI_MAX = 65 
+
+# --- Kite Connect Configuration (Data Only) ---
+KITE_API_KEY = os.getenv('KITE_API_KEY')
+KITE_API_SECRET = os.getenv('KITE_API_SECRET')
+KITE_ACCESS_TOKEN = os.getenv('KITE_ACCESS_TOKEN')
+
+# --- News & Airdrop Configuration ---
 NEWS_CHECK_INTERVAL = 1800 # 30 minutes
+AIRDROP_CHECK_INTERVAL = 21600 # 6 hours (Airdrops aren't that frequent)
 

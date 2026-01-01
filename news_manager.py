@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import requests
 import yfinance as yf
@@ -45,21 +46,22 @@ class NewsManager:
         except Exception as e:
             logger.error(f"Failed to save seen news: {e}")
 
-    def analyze_sentiment(self, text):
-        """Analyze title sentiment using Gemini AI with TextBlob fallback."""
+    def analyze_sentiment(self, text, description=None):
+        """Analyze title and description sentiment using Gemini AI with TextBlob fallback."""
         result = {
             'sentiment': 'NEUTRAL',
             'score': 0,
             'ai_insight': None
         }
         
-        if not text: return result
+        full_text = f"{text}. {description}" if description else text
+        if not full_text: return result
         
         # 1. Try Gemini AI
         if self.use_ai:
             try:
                 prompt = (
-                    f"Analyze this financial news title: '{text}'. "
+                    f"Analyze this financial news:\nTitle: '{text}'\nDescription: '{description}'\n"
                     f"Return ONLY a JSON object with these keys: "
                     f"sentiment (BULLISH, BEARISH, or NEUTRAL), "
                     f"price_prediction (e.g., '+2.5%', '-1.0%', '0%'), "
@@ -74,6 +76,7 @@ class NewsManager:
                     f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
                 )
                 return result
+
             except Exception as e:
                 logger.error(f"Gemini Analysis failed: {e}")
                 # Fallthrough to TextBlob
@@ -90,91 +93,69 @@ class NewsManager:
         
         return result
 
-    def is_recent(self, date_str):
-        """Checks if news is from the last 24 hours."""
+    def is_recent(self, date_str, expiry_hours=24):
+        """Checks if news is from the last X hours."""
         try:
-            if not date_str: return True # Default to True if no date, but rely on ID check
+            if not date_str: return True 
             
             # Auto-parse various formats
-            dt = dateutil.parser.parse(date_str)
+            if isinstance(date_str, (int, float)):
+                dt = datetime.fromtimestamp(date_str, tz=timezone.utc)
+            else:
+                dt = dateutil.parser.parse(date_str)
             
-            # Make sure dt is offset-aware usually (or compare naive)
-            # best way: ensure both are UTC if possible
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             
             now = datetime.now(timezone.utc)
-            # Relaxed window to 24 hours to ensure daily news catches are not missed
-            is_recent = (now - dt) < timedelta(hours=24)
+            is_recent = (now - dt) < timedelta(hours=expiry_hours)
             
             if not is_recent:
-                logger.debug(f"Skipping old news: {date_str} ({(now - dt).total_seconds()/3600:.1f}h old)")
+                logger.debug(f"Skipping old item: {date_str} ({(now - dt).total_seconds()/3600:.1f}h old)")
                 
             return is_recent
         except Exception as e:
             logger.warning(f"Date parsing failed for {date_str}: {e}")
             return True # Fail open to avoid missing news, ID check captures dupes
 
-    def fetch_stock_news(self):
-        """Fetches latest news for configured stock symbols using yfinance."""
+    async def fetch_stock_news(self):
+        """Fetches latest Indian stock market news from Economic Times RSS."""
         news_items = []
+        # Economic Times Markets - Very active and live
+        url = "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
+        
         try:
-            # We can check news for a major index or just the top stocks in our list
-            # Checking top 3 stocks to avoid too many requests/spam
-            top_stocks = config.STOCK_SYMBOLS[:3] 
+            feed = await asyncio.to_thread(feedparser.parse, url)
             
-            for symbol in top_stocks:
-                ticker = yf.Ticker(symbol)
-                ticker_news = ticker.news
+            for entry in feed.entries[:5]:
+                news_id = entry.get('id', entry.link)
                 
-                if ticker_news:
-                    # Get the most recent article
-                    item = ticker_news[0]
-                    
-                    # Handle Nested Structure (New yfinance)
-                    if 'content' in item:
-                        content = item['content']
-                        news_id = item.get('id')
-                        title = content.get('title')
-                        pub_date = content.get('pubDate')
+                if news_id not in self.seen_news_ids:
+                    pub_date = entry.get('published')
+                    if self.is_recent(pub_date, expiry_hours=24):
+                        self.seen_news_ids.add(news_id)
                         
-                        # Link extraction
-                        link = content.get('canonicalUrl', {}).get('url')
-                        if not link and 'clickThroughUrl' in content:
-                            ctu = content['clickThroughUrl']
-                            if isinstance(ctu, dict):
-                                link = ctu.get('url')
-                            else:
-                                link = ctu
-                                
-                        publisher = content.get('provider', {}).get('displayName', 'Yahoo Finance')
+                        # Try to find a summary or description
+                        summary = entry.get('summary') or entry.get('description') or ""
                         
-                    else:
-                        # Fallback / Old Structure
-                        news_id = item.get('uuid')
-                        title = item.get('title')
-                        link = item.get('link')
-                        pub_date = item.get('providerPublishTime')
-                        publisher = item.get('provider', {}).get('displayName', 'Yahoo Finance')
+                        # Clean up HTML tags if present (basic)
+                        summary = str(TextBlob(summary).string) 
 
-                    if news_id and news_id not in self.seen_news_ids:
-                        if self.is_recent(pub_date):
-                            self.seen_news_ids.add(news_id)
-                            news_items.append({
-                                'title': title,
-                                'link': link,
-                                'source': pub_date,
-                                'publisher': publisher,
-                                'type': 'STOCK',
-                                'related_tickers': [symbol],
-                                'sentiment': self.analyze_sentiment(title)
-                            })
-                            try:
-                                self.save_seen_news()
-                            except: pass
+                        news_items.append({
+                            'title': entry.title,
+                            'summary': summary[:200] + "..." if len(summary) > 200 else summary, 
+                            'link': entry.link,
+                            'source': pub_date or "Recently",
+                            'publisher': 'Economic Times',
+                            'type': 'STOCK',
+                            'sentiment': self.analyze_sentiment(entry.title, summary)
+                        })
+                        try:
+                            self.save_seen_news()
+                        except: pass
         except Exception as e:
-            logger.error(f"Error fetching stock news: {e}")
-            
+            logger.error(f"Error fetching Economic Times news: {e}")
+
         return news_items
 
     def fetch_crypto_news(self):
@@ -187,18 +168,28 @@ class NewsManager:
         url = "https://cryptopanic.com/api/v1/posts/"
         params = {
             "auth_token": config.CRYPTOPANIC_API_KEY,
-            "filter": "important", # Only important news
+            "filter": "all", # Relaxed from 'important' to 'all' to ensure some news flow
             "kind": "news",
             "public": "true"
         }
 
         try:
-            response = requests.get(url, params=params, timeout=10)
-            data = response.json()
+            response = requests.get(url, params=params, timeout=15)
+            
+            # Debug block/invalid response
+            if response.status_code != 200:
+                logger.error(f"CryptoPanic API Error {response.status_code}: {response.text[:200]}")
+                return []
+
+            try:
+                data = response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse CryptoPanic JSON. Status: {response.status_code}. Content start: {response.text[:200]}")
+                return []
             
             if 'results' in data:
-                # Check top 3 results
-                for post in data['results'][:3]:
+                # Check top 5 results
+                for post in data['results'][:5]:
                     news_id = str(post['id'])
                     
                     if news_id not in self.seen_news_ids:
@@ -206,8 +197,12 @@ class NewsManager:
                         if self.is_recent(pub_date):
                             self.seen_news_ids.add(news_id)
                             
+                            # CryptoPanic provides 'domain' but often no full body in 'post' without premium.
+                            # We can use the title itself as it's usually descriptive for these aggregated feeds.
+                            
                             news_items.append({
                                 'title': post['title'],
+                                'summary': post['title'], # CryptoPanic free often just gives titles
                                 'link': post['url'], 
                                 'source': pub_date,
                                 'publisher': post['domain'],
@@ -233,12 +228,11 @@ class NewsManager:
             
             # Check top 2 entries
             for entry in feed.entries[:2]:
-                news_id = entry.id
+                news_id = entry.link
                 
                 if news_id not in self.seen_news_ids:
-                    # Convert struct_time to datetime string for checking
                     try:
-                        dt = datetime(*entry.published_parsed[:6])
+                        dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                         pub_date = dt.isoformat()
                     except:
                         pub_date = None
@@ -246,7 +240,6 @@ class NewsManager:
                     if self.is_recent(pub_date):
                         self.seen_news_ids.add(news_id)
                         
-                        # Extract image ... (unchanged logic)
                         image_url = None
                         if 'media_content' in entry:
                             image_url = entry.media_content[0]['url']
@@ -256,14 +249,18 @@ class NewsManager:
                                     image_url = link.href
                                     break
                         
+                        # Get summary for experts
+                        summary = entry.get('summary') or entry.get('description') or ""
+                        
                         news_items.append({
                             'title': entry.title,
+                            'summary': summary[:150] + "..." if len(summary) > 150 else summary,
                             'link': entry.link,
                             'source': dt.strftime("%H:%M") if pub_date else "Just Now",
                             'publisher': 'CoinTelegraph Experts',
                             'type': 'CHART',
                             'image_url': image_url,
-                            'sentiment': self.analyze_sentiment(entry.title)
+                            'sentiment': self.analyze_sentiment(entry.title, summary)
                         })
                         try:
                             self.save_seen_news()
@@ -273,3 +270,46 @@ class NewsManager:
             
         return news_items
 
+    async def fetch_airdrop_opportunities(self):
+        """Fetches latest airdrop opportunities from AirdropAlert RSS."""
+        airdrops = []
+        url = "https://airdropalert.com/feed/rssfeed"
+        
+        try:
+            logger.info("Checking for new airdrops...")
+            feed = await asyncio.to_thread(feedparser.parse, url)
+            
+            for entry in feed.entries[:3]:
+                news_id = entry.get('id', entry.link)
+                
+                if news_id not in self.seen_news_ids:
+                    # Parse date
+                    try:
+                        dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                        pub_date = dt.isoformat()
+                    except:
+                        pub_date = datetime.now(timezone.utc).isoformat()
+
+                    if self.is_recent(pub_date, expiry_hours=168): # Relaxed to 7 days
+                        self.seen_news_ids.add(news_id)
+                        
+                        # Extract basic info
+                        # Airdrop summary
+                        summary = entry.get('summary') or entry.get('description') or ""
+
+                        airdrops.append({
+                            'title': entry.title,
+                            'summary': summary[:150] + "..." if len(summary) > 150 else summary,
+                            'link': entry.link,
+                            'source': datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                            'publisher': 'AirdropAlert',
+                            'type': 'AIRDROP',
+                            'sentiment': self.analyze_sentiment(entry.title, summary)
+                        })
+                        try:
+                            self.save_seen_news()
+                        except: pass
+        except Exception as e:
+            logger.error(f"Error fetching airdrops: {e}")
+            
+        return airdrops

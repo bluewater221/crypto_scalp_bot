@@ -110,10 +110,15 @@ async def send_news(bot: Bot, news_item, market_type):
 
     emoji = "₿" if market_type == 'CRYPTO' else "📈"
     
+    # Add coin symbol to header if crypto
+    coin_header = ""
+    if market_type == 'CRYPTO' and news_item.get('currency'):
+        coin_header = f" [{news_item['currency'].upper()}]"
+    
     if news_item.get('type') == 'CHART':
          emoji = "📊"
          message = (
-            f"📰 *EXPERT CHART ANALYSIS* {emoji}\n"
+            f"📊 *EXPERT CHART ANALYSIS*{coin_header}\n"
             f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
             f"_{news_item['publisher']} • {news_item['source']}_\n\n"
@@ -123,10 +128,11 @@ async def send_news(bot: Bot, news_item, market_type):
         ticker_str = f" ({', '.join(tickers)})" if tickers else ""
         
         message = (
-            f"📰 *{market_type} NEWS{ticker_str}* {emoji}\n"
+            f"{emoji} *{market_type} NEWS{coin_header}{ticker_str}*\n"
             f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
             f"_{news_item['publisher']} • {news_item['source']}_\n\n"
+            f"{news_item.get('summary', '')}\n\n"
         )
 
     # Add AI Insight if available
@@ -153,4 +159,50 @@ async def send_news(bot: Bot, news_item, market_type):
         logger.info(f"News sent to {market_type}: {news_item['title']}")
     except Exception as e:
         logger.error(f"Failed to send news: {e}")
+
+async def send_airdrop(bot: Bot, airdrop_item):
+    """
+    Sends a formatted airdrop alert to the crypto channel.
+    """
+    channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
+    
+    if not channel_id:
+        return
+
+    # Airdrop Formatting
+    # 🪂 NEW AIRDROP OPPORTUNITY 🪂
+    # Title
+    # Source
+    
+    sentiment = airdrop_item.get('sentiment', {})
+    sentiment_val = sentiment.get('sentiment', 'NEUTRAL') if isinstance(sentiment, dict) else 'NEUTRAL'
+    insight = sentiment.get('ai_insight') if isinstance(sentiment, dict) else None
+    
+    s_emoji = "⚪"
+    if sentiment_val == 'BULLISH': s_emoji = "🟢"
+    elif sentiment_val == 'BEARISH': s_emoji = "🔴"
+
+    message = (
+        f"🪂 *NEW AIRDROP OPPORTUNITY* 🪂\n"
+        f"Potential: {s_emoji} {sentiment_val}\n\n"
+        f"**{airdrop_item['title']}**\n"
+        f"_{airdrop_item['publisher']} • {airdrop_item['source']}_\n\n"
+    )
+
+    if insight:
+        message += f"{insight}\n\n"
+        
+    message += f"🔗 [Airdrop Details & Steps]({airdrop_item['link']})\n\n"
+    message += "⚠️ DyOR. Never share private keys or seed phrases."
+    
+    try:
+        await bot.send_message(
+            chat_id=channel_id, 
+            text=message, 
+            parse_mode='Markdown'
+        )
+        logger.info(f"Airdrop alert sent: {airdrop_item['title']}")
+    except Exception as e:
+        logger.error(f"Failed to send airdrop alert: {e}")
+
 

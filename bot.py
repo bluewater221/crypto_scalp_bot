@@ -151,12 +151,54 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Could not fetch crypto price for {symbol}. Try again later.")
         return
     
-    # Unknown symbol - try as Indian stock
+    # Dynamic Search via CoinGecko
     try:
+        import requests
+        search_url = f"https://api.coingecko.com/api/v3/search?query={symbol}"
+        logger.info(f"Searching CoinGecko for: {symbol}")
+        
+        search_resp = await asyncio.to_thread(requests.get, search_url, timeout=10)
+        
+        if search_resp.status_code == 200:
+            search_data = search_resp.json()
+            coins = search_data.get('coins', [])
+            
+            if coins:
+                # Take the first best match
+                best_match = coins[0]
+                coin_id = best_match['id']
+                coin_name = best_match['name']
+                coin_symbol = best_match['symbol']
+                
+                # Fetch price for this ID
+                price_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
+                price_resp = await asyncio.to_thread(requests.get, price_url, timeout=10)
+                
+                if price_resp.status_code == 200:
+                    data = price_resp.json()
+                    if coin_id in data:
+                        price = data[coin_id]['usd']
+                        change = data[coin_id].get('usd_24h_change', 0) or 0
+                        emoji = "🟢" if change >= 0 else "🔴"
+                        
+                        msg = (
+                            f"💰 **{coin_name} ({coin_symbol.upper()})/USD**\n\n"
+                            f"Price: ${price:,.6f}\n" # 6 decimals for shitcoins
+                            f"24h Change: {emoji} {change:+.2f}%"
+                        )
+                        await update.message.reply_text(msg, parse_mode='Markdown')
+                        return
+
+        # If crypto search fails, try Stock
         await fetch_stock_price(update, f"{symbol}.NS")
+
     except Exception as e:
-        logger.error(f"Error fetching stock price for {symbol}: {e}")
-        await update.message.reply_text(f"❌ Could not fetch price for {symbol}")
+        logger.error(f"Error resolving symbol {symbol}: {e}")
+        try:
+             # Last resort: Stock
+            await fetch_stock_price(update, f"{symbol}.NS")
+        except:
+             await update.message.reply_text(f"❌ Could not find price for {symbol} (Crypto or Stock)")
 
 async def fetch_stock_price(update: Update, stock_symbol: str):
     """Helper to fetch and display stock price."""
@@ -185,7 +227,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Fetch news
-        stock_news = news_service.fetch_stock_news()
+        stock_news = await news_service.fetch_stock_news()
         crypto_news = news_service.fetch_crypto_news()
         
         total = len(stock_news) + len(crypto_news)
@@ -204,6 +246,25 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in news command: {e}")
         await update.message.reply_text(f"❌ Error fetching news: {str(e)}")
+
+async def airdrops_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manually trigger airdrop fetch and send to user."""
+    await update.message.reply_text("🪂 Checking for latest airdrops...")
+    
+    try:
+        airdrops = await news_service.fetch_airdrop_opportunities()
+        
+        if not airdrops:
+            await update.message.reply_text("No new airdrops found. Check back later!")
+        else:
+            for item in airdrops:
+                await telegram_handler.send_airdrop(context.bot, item)
+            
+            await update.message.reply_text(f"✅ Sent {len(airdrops)} airdrop alerts to the channel!")
+            
+    except Exception as e:
+        logger.error(f"Error in airdrops command: {e}")
+        await update.message.reply_text(f"❌ Error fetching airdrops: {str(e)}")
 
 # --- Scanning Jobs ---
 async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
@@ -255,7 +316,7 @@ async def check_news(context: ContextTypes.DEFAULT_TYPE):
     # 1. Stock News
     # News can happen anytime, not just during market hours
     try:
-        stock_news = news_service.fetch_stock_news()
+        stock_news = await news_service.fetch_stock_news()
         for item in stock_news:
             await telegram_handler.send_news(context.bot, item, 'STOCK')
     except Exception as e:
@@ -270,6 +331,15 @@ async def check_news(context: ContextTypes.DEFAULT_TYPE):
     chart_news = news_service.fetch_expert_analysis()
     for item in chart_news:
         await telegram_handler.send_news(context.bot, item, 'CRYPTO')
+
+async def check_airdrops(context: ContextTypes.DEFAULT_TYPE):
+    """Checks for airdrop updates."""
+    logger.info("Checking for AIRDROPS...")
+    airdrops = await news_service.fetch_airdrop_opportunities()
+    
+    for item in airdrops:
+        await telegram_handler.send_airdrop(context.bot, item)
+
 
 
 def main():
@@ -297,6 +367,8 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("price", price_command))
     application.add_handler(CommandHandler("news", news_command))
+    application.add_handler(CommandHandler("airdrops", airdrops_command))
+
 
     # 3. separate jobs
     job_queue = application.job_queue
@@ -312,8 +384,11 @@ def main():
         # News Check
         job_queue.run_repeating(check_news, interval=config.NEWS_CHECK_INTERVAL, first=20)
         
+        # Airdrop Check
+        job_queue.run_repeating(check_airdrops, interval=config.AIRDROP_CHECK_INTERVAL, first=30)
+        
         # Trade Manager (New) - Check every 5 minutes
-        job_queue.run_repeating(check_trades, interval=300, first=30)
+        job_queue.run_repeating(check_trades, interval=300, first=40)
     else:
         logger.error("❌ JobQueue is not available! Make sure 'python-telegram-bot[job-queue]' is installed.")
 
