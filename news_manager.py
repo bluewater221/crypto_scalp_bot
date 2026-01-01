@@ -74,6 +74,7 @@ class NewsManager:
                     f"price_prediction (e.g., '+2.5%', '-1.0%', '0%'), "
                     f"reasoning (concise, max 15 words), "
                     f"{cost_prompt}"
+                    f"estimated_value (short string estimate of potential value in USDT, e.g. '$10-$50', 'High', 'Unknown'), "
                     f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']). "
                     f"If no specific company, return empty list."
                 )
@@ -90,6 +91,7 @@ class NewsManager:
                     result['low_cost'] = ai_data.get('low_cost', True)
                     result['requires_premium_x'] = ai_data.get('requires_premium_x', False)
                     result['is_telegram_app'] = ai_data.get('is_telegram_app', False)
+                    result['estimated_value'] = ai_data.get('estimated_value', 'Unknown')
                 return result
 
             except Exception as e:
