@@ -114,13 +114,28 @@ class TradeManager:
             f"Close: {close_price}"
         )
         
-        # Route to Log Channel (Private)
-        channel_id = config.TELEGRAM_LOG_CHANNEL_ID
+        # Route to PnL Channel
+        channel_id = None
+        if trade['market'] == 'CRYPTO':
+            channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID
+        elif trade['market'] == 'STOCK':
+             channel_id = config.TELEGRAM_STOCK_PNL_CHANNEL_ID
+             
+        # Fallback to generic Log Channel or Signal Channel if PnL channel is missing
+        if not channel_id:
+            channel_id = config.TELEGRAM_LOG_CHANNEL_ID
         
+        # Final Fallback: Send to the Main Signal Channel (so checking PnL is possible)
+        if not channel_id:
+             if trade['market'] == 'CRYPTO':
+                channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
+             else:
+                channel_id = config.TELEGRAM_STOCK_CHANNEL_ID
+
         if channel_id:
              asyncio.create_task(bot.send_message(chat_id=channel_id, text=msg, parse_mode='Markdown'))
         else:
-             logger.info(f"Trade Closed ({outcome}): {trade['symbol']} (Log Channel not set)")
+             logger.info(f"Trade Closed ({outcome}): {trade['symbol']} (No Channel set)")
 
     def get_stats(self):
         if not self.history:
