@@ -143,7 +143,7 @@ async def send_news(bot: Bot, news_item, market_type):
     if insight:
         message += f"{insight}\n\n"
         
-    message += f"[Read More]({news_item['link']})"
+    # message += f"[Read More]({news_item['link']})" # Removed per user request
     
     try:
         # Check if there is an image to send
