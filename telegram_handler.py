@@ -20,6 +20,7 @@ async def send_signal(bot: Bot, signal_data, market_type):
         return
 
     # Generate Chart
+    # User Request: "put original image" (Restore Chart)
     chart_path = chart_generator.generate_chart(
         signal_data['df'], 
         signal_data['symbol'], 
@@ -28,16 +29,17 @@ async def send_signal(bot: Bot, signal_data, market_type):
     )
     
     # Format Message
-    # 🚀 BTC/USDT LONG | Entry: $67,250 | SL: $66,914 | TP: $67,832 | Risk: 0.5% | RSI: 28 📉
+    # Standardized Template (Like Stock)
     emoji = "🚀" if signal_data['side'] == 'LONG' else "📉"
     price_fmt = "${:,.2f}" if market_type == 'CRYPTO' else "₹{:,.2f}"
     
+    # Unified Template Structure
     message = (
-        f"{emoji} {signal_data['symbol']} {signal_data['side']} | "
-        f"Entry: {price_fmt.format(signal_data['entry'])} | "
-        f"SL: {price_fmt.format(signal_data['stop_loss'])} | "
-        f"TP: {price_fmt.format(signal_data['take_profit'])} | "
-        f"Risk: {signal_data['risk_pct'] * 100}% | "
+        f"{emoji} **{signal_data['symbol']}** ({signal_data['side']})\n"
+        f"Entry: {price_fmt.format(signal_data['entry'])}\n"
+        f"SL: {price_fmt.format(signal_data['stop_loss'])}\n"
+        f"TP: {price_fmt.format(signal_data['take_profit'])}\n"
+        f"Risk: {signal_data['risk_pct'] * 100}%\n"
         f"Setup: {signal_data['setup']}"
     )
     
@@ -52,17 +54,18 @@ async def send_signal(bot: Bot, signal_data, market_type):
     message += f"\n\n⚠️ Educational Only. DYOR."
     
     try:
-        # Send Photo with Caption
+        # Send Photo with Caption (If chart exists)
         if chart_path and os.path.exists(chart_path):
             with open(chart_path, 'rb') as photo:
-                await bot.send_photo(chat_id=channel_id, photo=photo, caption=message)
+                await bot.send_photo(chat_id=channel_id, photo=photo, caption=message, parse_mode='Markdown')
             # Cleanup
             try:
                 os.remove(chart_path)
             except:
                 pass
         else:
-            await bot.send_message(chat_id=channel_id, text=message)
+            # Text Only (Crypto falls here now)
+            await bot.send_message(chat_id=channel_id, text=message, parse_mode='Markdown')
 
         # Send Poll (Disabled per user request)
         # question = "What's your risk tolerance for this trade?"
@@ -198,7 +201,8 @@ async def send_airdrop(bot: Bot, airdrop_item):
 
     message = (
         f"🪂 *NEW AIRDROP OPPORTUNITY* 🪂\n"
-        f"Potential: {s_emoji} {sentiment_val}\n\n"
+        f"Potential: {s_emoji} {sentiment_val}\n"
+        f"Value: 💰 **{sentiment.get('estimated_value', 'Unknown')}**\n\n"
         f"**{airdrop_item['title']}**\n"
     )
 
