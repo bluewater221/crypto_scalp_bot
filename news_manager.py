@@ -65,7 +65,9 @@ class NewsManager:
                     f"Return ONLY a JSON object with these keys: "
                     f"sentiment (BULLISH, BEARISH, or NEUTRAL), "
                     f"price_prediction (e.g., '+2.5%', '-1.0%', '0%'), "
-                    f"reasoning (concise, max 15 words)."
+                    f"reasoning (concise, max 15 words), "
+                    f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']). "
+                    f"If no specific company, return empty list."
                 )
                 response = self.model.generate_content(prompt)
                 ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
@@ -75,6 +77,7 @@ class NewsManager:
                     f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
                     f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
                 )
+                result['companies'] = ai_data.get('companies', [])
                 return result
 
             except Exception as e:
@@ -141,6 +144,9 @@ class NewsManager:
                         # Clean up HTML tags if present (basic)
                         summary = str(TextBlob(summary).string) 
 
+                        # Analyze Sentiment & Extract Tickers
+                        analysis_result = self.analyze_sentiment(entry.title, summary)
+                        
                         news_items.append({
                             'title': entry.title,
                             'summary': summary[:800] + "..." if len(summary) > 800 else summary, 
@@ -148,7 +154,8 @@ class NewsManager:
                             'source': pub_date or "Recently",
                             'publisher': 'Economic Times',
                             'type': 'STOCK',
-                            'sentiment': self.analyze_sentiment(entry.title, summary)
+                            'sentiment': analysis_result,
+                            'related_tickers': analysis_result.get('companies', [])
                         })
                         try:
                             self.save_seen_news()

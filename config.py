@@ -22,10 +22,8 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 GOOGLE_SHEETS_JSON = os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON', 'credentials.json')
 GOOGLE_SHEET_NAME = os.getenv('GOOGLE_SHEET_NAME', 'Scalper_Logs')
 
-# --- Crypto Configuration (Binance) ---
-BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
-BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
 
+# --- Crypto Configuration (Public Data) ---
 CRYPTO_PAIRS = ['BTC/USDT', 'ETH/USDT']
 CRYPTO_TIMEFRAME = '1m' # Using 1m data for calculation
 CRYPTO_SCAN_INTERVAL = 60 # 1 minute
@@ -69,10 +67,11 @@ ADX_MAX = 40
 RSI_MIN = 45
 RSI_MAX = 65 
 
-# --- Kite Connect Configuration (Data Only) ---
-KITE_API_KEY = os.getenv('KITE_API_KEY')
-KITE_API_SECRET = os.getenv('KITE_API_SECRET')
-KITE_ACCESS_TOKEN = os.getenv('KITE_ACCESS_TOKEN')
+# --- Kite Connect Configuration (Removed - Using yfinance fallback) ---
+KITE_API_KEY = None
+KITE_ACCESS_TOKEN = None
+
+# --- News & Airdrop Configuration ---
 
 # --- News & Airdrop Configuration ---
 NEWS_CHECK_INTERVAL = 1800 # 30 minutes

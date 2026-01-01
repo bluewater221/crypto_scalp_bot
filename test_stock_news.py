@@ -16,6 +16,7 @@ async def test_stock_news():
     else:
         print(f"✅ Found {len(news)} items:")
         for item in news:
+
             print(f"- {item['title']} ({item['publisher']})")
             print(f"  Summary: {item.get('summary', 'N/A')}")
             print(f"  Link: {item['link']}")
