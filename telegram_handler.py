@@ -64,15 +64,15 @@ async def send_signal(bot: Bot, signal_data, market_type):
         else:
             await bot.send_message(chat_id=channel_id, text=message)
 
-        # Send Poll
-        question = "What's your risk tolerance for this trade?"
-        options = ["conservative (0.5%)", "moderate (1%)", "aggressive (>1%)", "skip"]
-        await bot.send_poll(
-            chat_id=channel_id,
-            question=question,
-            options=options,
-            is_anonymous=True
-        )
+        # Send Poll (Disabled per user request)
+        # question = "What's your risk tolerance for this trade?"
+        # options = ["conservative (0.5%)", "moderate (1%)", "aggressive (>1%)", "skip"]
+        # await bot.send_poll(
+        #     chat_id=channel_id,
+        #     question=question,
+        #     options=options,
+        #     is_anonymous=True
+        # )
         
         logger.info(f"Signal sent to {market_type} channel for {signal_data['symbol']}")
 
