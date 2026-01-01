@@ -1,15 +1,24 @@
 import asyncio
 import logging
-import bot
-import config
 from datetime import datetime
 
-# Setup Logging
+# Setup Logging first to capture import errors
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+try:
+    import bot
+    import config
+except ImportError as e:
+    logger.critical(f"❌ Critical Import Error: {e}")
+    # We might want to exit here or let it fail later
+    raise e
+except Exception as e:
+    logger.critical(f"❌ Unexpected Error during imports: {e}")
+    raise e
 
 async def run_once():
     """Run a single scan cycle for Stocks and Crypto."""

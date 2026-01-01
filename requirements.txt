@@ -15,4 +15,4 @@ feedparser
 textblob
 google-generativeai
 kiteconnect
-nsepython
+lxml>=4.9.0
