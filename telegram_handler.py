@@ -124,12 +124,15 @@ async def send_news(bot: Bot, news_item, market_type):
         )
     else:
         tickers = news_item.get('related_tickers', [])
-        ticker_str = f"{', '.join(tickers)}" if tickers else ""
+        ticker_str = f"[{', '.join(tickers)}]" if tickers else ""
         
-        # User Request: Use Stock Name in header instead of generic "STOCK NEWS"
-        if market_type == 'STOCK' and ticker_str:
+        # User Request: Use Stock/Crypto Name in header instead of generic "NEWS"
+        # Logic: If we have tickers (e.g. [BTC], [RELIANCE]), use them.
+        if ticker_str:
              header_text = f"{ticker_str} NEWS"
         else:
+             # Fallback
+             coin_header = f" [{news_item['currency'].upper()}]" if market_type == 'CRYPTO' and news_item.get('currency') else ""
              header_text = f"{market_type} NEWS{coin_header}"
 
         message = (

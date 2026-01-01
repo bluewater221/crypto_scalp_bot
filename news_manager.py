@@ -220,6 +220,9 @@ class NewsManager:
                             # CryptoPanic provides 'domain' but often no full body in 'post' without premium.
                             # We can use the title itself as it's usually descriptive for these aggregated feeds.
                             
+                            # Analyze sentiment and extract tickers
+                            analysis_result = self.analyze_sentiment(post['title'])
+                            
                             news_items.append({
                                 'title': post['title'],
                                 'summary': post['title'], # CryptoPanic free often just gives titles
@@ -228,7 +231,8 @@ class NewsManager:
                                 'publisher': post['domain'],
                                 'type': 'CRYPTO',
                                 'currency': post['currencies'][0]['code'] if post.get('currencies') else 'General',
-                                'sentiment': self.analyze_sentiment(post['title'])
+                                'sentiment': analysis_result,
+                                'related_tickers': analysis_result.get('companies', [])
                             })
                             try:
                                 self.save_seen_news()
