@@ -40,6 +40,7 @@ RSI_OVERBOUGHT = 70
 CRYPTO_STOP_LOSS = 0.005 # 0.5%
 CRYPTO_TAKE_PROFIT = 0.01 # 1%
 CRYPTO_RISK_PER_TRADE = 0.5 # 0.5%
+INITIAL_CAPITAL_CRYPTO = 100 # USD
 
 # --- Stock Configuration (Indian Markets) ---
 # NIFTY500 or selected highly liquid stocks. 
@@ -73,6 +74,7 @@ EMA_SLOW = 21
 STOCK_STOP_LOSS = 0.005
 STOCK_TAKE_PROFIT = 0.015 # 1.5R Minimum
 STOCK_RISK_PER_TRADE = 0.5 
+INITIAL_CAPITAL_STOCK = 10000 # INR 
 
 
 ADX_MIN = 15 # Lowered from 20 to allow more trades

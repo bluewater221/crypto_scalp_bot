@@ -137,12 +137,80 @@ class TradeManager:
         else:
              logger.info(f"Trade Closed ({outcome}): {trade['symbol']} (No Channel set)")
 
+    def calculate_balance(self, market_type):
+        """Calculates current balance based on initial capital and trade history (Compounding)."""
+        if market_type == 'CRYPTO':
+            balance = config.INITIAL_CAPITAL_CRYPTO
+            currency = "$"
+        else:
+            balance = config.INITIAL_CAPITAL_STOCK
+            currency = "₹"
+            
+        trades = [t for t in self.history if t['market'] == market_type]
+        
+        for t in trades:
+            try:
+                # Standard Risk Management Calculation
+                # Risk Amount = Balance * Risk % (e.g. 0.5%)
+                # Position Size = Risk Amount / |Entry - SL|
+                # PnL = (Exit - Entry) * Size
+                
+                risk_per_trade = t.get('risk_pct', 0.005)
+                risk_amt = balance * risk_per_trade
+                
+                entry = t['entry']
+                sl = t['sl']
+                exit_price = t['close_price']
+                
+                # Protect against zero division
+                if entry == sl: continue
+
+                # Quantity
+                qty = risk_amt / abs(entry - sl)
+                
+                # Realized PnL
+                if t['side'] == 'LONG':
+                    pnl = (exit_price - entry) * qty
+                else:
+                    pnl = (entry - exit_price) * qty
+                
+                balance += pnl
+            except Exception as e:
+                logger.error(f"Error calculating balance for trade {t.get('symbol')}: {e}")
+                
+        return balance, currency
+
     def get_stats(self):
         if not self.history:
-            return "No trades recorded yet."
+            return (
+                "📊 **Portfolio Status**\n"
+                f"Stocks: ₹{config.INITIAL_CAPITAL_STOCK:,.2f} (Start)\n"
+                f"Crypto: ${config.INITIAL_CAPITAL_CRYPTO:,.2f} (Start)\n\n"
+                "No trades closed yet."
+            )
+        
+        # Calculate Balances
+        stock_bal, stock_curr = self.calculate_balance('STOCK')
+        crypto_bal, crypto_curr = self.calculate_balance('CRYPTO')
+        
+        # Calculate Growth
+        stock_growth = ((stock_bal - config.INITIAL_CAPITAL_STOCK) / config.INITIAL_CAPITAL_STOCK) * 100
+        crypto_growth = ((crypto_bal - config.INITIAL_CAPITAL_CRYPTO) / config.INITIAL_CAPITAL_CRYPTO) * 100
         
         wins = len([t for t in self.history if t['outcome'] == 'WIN'])
         total = len(self.history)
         win_rate = (wins / total) * 100
         
-        return f"📊 **Performance**\nTotal Trades: {total}\nWin Rate: {win_rate:.1f}%"
+        stats = (
+            f"📊 **Portfolio Performance**\n\n"
+            f"📈 **Stocks**\n"
+            f"Balance: {stock_curr}{stock_bal:,.2f}\n"
+            f"Growth: {stock_growth:+.2f}%\n\n"
+            f"💰 **Crypto**\n"
+            f"Balance: {crypto_curr}{crypto_bal:,.2f}\n"
+            f"Growth: {crypto_growth:+.2f}%\n\n"
+            f"🏆 **Trade Stats**\n"
+            f"Win Rate: {win_rate:.1f}% ({wins}/{total})\n"
+            f"Total Trades: {total}"
+        )
+        return stats
