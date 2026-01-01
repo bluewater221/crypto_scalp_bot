@@ -23,18 +23,23 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Create Google Credentials File
+      env:
+        GS_SECRET: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+      run: |
+        if [ -n "$GS_SECRET" ]; then
+          python -c "import os; open('google_creds.json','w').write(os.environ['GS_SECRET'])"
+        else
+          echo "No Google Sheets Secret found. Skipping."
+        fi
+
     - name: Run Bot Scanner
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CRYPTO_CHANNEL_ID: ${{ secrets.TELEGRAM_CRYPTO_CHANNEL_ID }}
         TELEGRAM_STOCK_CHANNEL_ID: ${{ secrets.TELEGRAM_STOCK_CHANNEL_ID }}
-        GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+        GOOGLE_SHEETS_CREDENTIALS_JSON: "google_creds.json"
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         PAPER_TRADING: "True"
       run: |
-        # We run the bot in "Once" mode if possible, or just let it timeout.
-        # Ideally, we should have a script that runs one loop and exits.
-        # Using run_once.py if it exists, else we run bot.py with a timeout or flag.
-        # Creating a temporary run_once script logic here or assuming it exists.
-        # Since run_once.py doesn't strictly exist in the file list I saw (wait, I saw it in open files list in prompt metadata? YES, run_once.py was in open docs)
         python run_once.py
