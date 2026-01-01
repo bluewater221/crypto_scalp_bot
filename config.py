@@ -62,7 +62,9 @@ STOCK_RISK_PER_TRADE = 0.5
 
 # Strict Strategy Constants
 EMA_CROSS_THRESHOLD = 0.001 # 0.1% separation
-ADX_MIN = 20
+# Strict Strategy Constants
+EMA_CROSS_THRESHOLD = 0.001 # 0.1% separation
+ADX_MIN = 15 # Lowered from 20 to allow more trades
 ADX_MAX = 40
 RSI_MIN = 45
 RSI_MAX = 65 
@@ -72,8 +74,6 @@ KITE_API_KEY = None
 KITE_ACCESS_TOKEN = None
 
 # --- News & Airdrop Configuration ---
-
 # --- News & Airdrop Configuration ---
-NEWS_CHECK_INTERVAL = 1800 # 30 minutes
-AIRDROP_CHECK_INTERVAL = 21600 # 6 hours (Airdrops aren't that frequent)
-
+NEWS_CHECK_INTERVAL = 14400 # 4 hours (Was 30 mins) - "Less News"
+AIRDROP_CHECK_INTERVAL = 86400 # 24 hours (Was 6 hours)

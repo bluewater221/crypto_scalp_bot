@@ -130,7 +130,8 @@ class NewsManager:
         try:
             feed = await asyncio.to_thread(feedparser.parse, url)
             
-            for entry in feed.entries[:5]:
+            # Reduced to Top 2 for "Less News"
+            for entry in feed.entries[:2]:
                 news_id = entry.get('id', entry.link)
                 
                 if news_id not in self.seen_news_ids:
@@ -175,7 +176,7 @@ class NewsManager:
         url = "https://cryptopanic.com/api/v1/posts/"
         params = {
             "auth_token": config.CRYPTOPANIC_API_KEY,
-            "filter": "all", # Relaxed from 'important' to 'all' to ensure some news flow
+            "filter": "important", # "Less News" - Reverted to important only
             "kind": "news",
             "public": "true"
         }
@@ -195,8 +196,8 @@ class NewsManager:
                 return []
             
             if 'results' in data:
-                # Check top 5 results
-                for post in data['results'][:5]:
+                # Check top 2 results only (Was 5)
+                for post in data['results'][:2]:
                     news_id = str(post['id'])
                     
                     if news_id not in self.seen_news_ids:
