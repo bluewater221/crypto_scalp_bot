@@ -24,7 +24,8 @@ GOOGLE_SHEET_NAME = os.getenv('GOOGLE_SHEET_NAME', 'Scalper_Logs')
 
 
 # --- Crypto Configuration (Public Data) ---
-CRYPTO_PAIRS = ['BTC/USDT', 'ETH/USDT']
+# --- Crypto Configuration (Public Data) ---
+CRYPTO_PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT']
 CRYPTO_TIMEFRAME = '1m' # Using 1m data for calculation
 CRYPTO_SCAN_INTERVAL = 60 # 1 minute
 CRYPTO_MARKET_OPEN = 9
@@ -43,7 +44,9 @@ CRYPTO_RISK_PER_TRADE = 0.5 # 0.5%
 # For demo, using a small list of liquid reliable stocks.
 STOCK_SYMBOLS = [
     'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS',
-    'GOLDBEES.NS', 'SILVERBEES.NS', 'NIFTYBEES.NS', 'BANKBEES.NS', 'LIQUIDBEES.NS'
+    'AXISBANK.NS', 'KOTAKBANK.NS', 'LT.NS', 'HUL.NS', 'ITC.NS', 'BAJFINANCE.NS', 
+    'MARUTI.NS', 'TATAMOTORS.NS', 'GOLDBEES.NS', 'SILVERBEES.NS', 'NIFTYBEES.NS', 
+    'BANKBEES.NS', 'LIQUIDBEES.NS'
 ] 
 STOCK_TIMEFRAME = '5m'
 STOCK_SCAN_INTERVAL = 300 # 5 minutes
@@ -60,10 +63,7 @@ STOCK_STOP_LOSS = 0.005
 STOCK_TAKE_PROFIT = 0.015 # 1.5R Minimum
 STOCK_RISK_PER_TRADE = 0.5 
 
-# Strict Strategy Constants
-EMA_CROSS_THRESHOLD = 0.001 # 0.1% separation
-# Strict Strategy Constants
-EMA_CROSS_THRESHOLD = 0.001 # 0.1% separation
+
 ADX_MIN = 15 # Lowered from 20 to allow more trades
 ADX_MAX = 40
 RSI_MIN = 45
