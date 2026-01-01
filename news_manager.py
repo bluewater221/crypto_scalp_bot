@@ -52,7 +52,9 @@ class NewsManager:
             'sentiment': 'NEUTRAL',
             'score': 0,
             'ai_insight': None,
-            'low_cost': True # Default to True (pass) if not checked
+            'low_cost': True, # Default to True (pass) if not checked
+            'requires_premium_x': False, # Default to False (pass)
+            'is_telegram_app': False # Default to False
         }
         
         full_text = f"{text}. {description}" if description else text
@@ -63,7 +65,7 @@ class NewsManager:
             try:
                 cost_prompt = ""
                 if check_cost:
-                    cost_prompt = "low_cost (boolean: true if free or < 5 USDT cost, false if expensive), "
+                    cost_prompt = "low_cost (boolean: true if free or < 5 USDT cost), requires_premium_x (boolean: true if X/Twitter Premium is required), is_telegram_app (boolean: true if it is a Telegram Mini App/Bot game), "
 
                 prompt = (
                     f"Analyze this financial news:\nTitle: '{text}'\nDescription: '{description}'\n"
@@ -85,7 +87,9 @@ class NewsManager:
                 )
                 result['companies'] = ai_data.get('companies', [])
                 if check_cost:
-                    result['low_cost'] = ai_data.get('low_cost', True) 
+                    result['low_cost'] = ai_data.get('low_cost', True)
+                    result['requires_premium_x'] = ai_data.get('requires_premium_x', False)
+                    result['is_telegram_app'] = ai_data.get('is_telegram_app', False)
                 return result
 
             except Exception as e:
@@ -323,13 +327,22 @@ class NewsManager:
                         # Analyze Sentiment & Check Cost
                         analysis_result = self.analyze_sentiment(entry.title, summary, check_cost=True)
                         
-                        # Filter out expensive airdrops (> 5 USDT)
+                        # Filter out expensive airdrops (> 5 USDT) AND Premium X
                         if not analysis_result.get('low_cost', True):
                              logger.info(f"Skipping expensive airdrop: {entry.title}")
                              continue
 
+                        if analysis_result.get('requires_premium_x', False):
+                             logger.info(f"Skipping Premium X airdrop: {entry.title}")
+                             continue
+
+                        # Highlight Telegram Apps
+                        final_title = entry.title
+                        if analysis_result.get('is_telegram_app', False):
+                             final_title = f"📱 [TG APP] {entry.title}"
+
                         airdrops.append({
-                            'title': entry.title,
+                            'title': final_title,
                             'summary': summary[:150] + "..." if len(summary) > 150 else summary,
                             'link': entry.link,
                             'source': datetime.now(timezone.utc).strftime("%Y-%m-%d"),
