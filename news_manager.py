@@ -143,7 +143,7 @@ class NewsManager:
 
                         news_items.append({
                             'title': entry.title,
-                            'summary': summary[:200] + "..." if len(summary) > 200 else summary, 
+                            'summary': summary[:800] + "..." if len(summary) > 800 else summary, 
                             'link': entry.link,
                             'source': pub_date or "Recently",
                             'publisher': 'Economic Times',
@@ -254,7 +254,7 @@ class NewsManager:
                         
                         news_items.append({
                             'title': entry.title,
-                            'summary': summary[:150] + "..." if len(summary) > 150 else summary,
+                            'summary': summary[:800] + "..." if len(summary) > 800 else summary,
                             'link': entry.link,
                             'source': dt.strftime("%H:%M") if pub_date else "Just Now",
                             'publisher': 'CoinTelegraph Experts',

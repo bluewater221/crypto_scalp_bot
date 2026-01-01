@@ -121,7 +121,6 @@ async def send_news(bot: Bot, news_item, market_type):
             f"📊 *EXPERT CHART ANALYSIS*{coin_header}\n"
             f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
-            f"_{news_item['publisher']} • {news_item['source']}_\n\n"
         )
     else:
         tickers = news_item.get('related_tickers', [])
@@ -131,7 +130,6 @@ async def send_news(bot: Bot, news_item, market_type):
             f"{emoji} *{market_type} NEWS{coin_header}{ticker_str}*\n"
             f"Sentiment: {s_emoji} {sentiment_val}\n\n"
             f"**{news_item['title']}**\n"
-            f"_{news_item['publisher']} • {news_item['source']}_\n\n"
             f"{news_item.get('summary', '')}\n\n"
         )
 
@@ -186,7 +184,6 @@ async def send_airdrop(bot: Bot, airdrop_item):
         f"🪂 *NEW AIRDROP OPPORTUNITY* 🪂\n"
         f"Potential: {s_emoji} {sentiment_val}\n\n"
         f"**{airdrop_item['title']}**\n"
-        f"_{airdrop_item['publisher']} • {airdrop_item['source']}_\n\n"
     )
 
     if insight:
