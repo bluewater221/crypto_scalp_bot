@@ -195,7 +195,7 @@ async def send_airdrop(bot: Bot, airdrop_item):
     if insight:
         message += f"{insight}\n\n"
         
-    message += f"🔗 [Airdrop Details & Steps]({airdrop_item['link']})\n\n"
+    # message += f"🔗 [Airdrop Details & Steps]({airdrop_item['link']})\n\n" # Removed per user request
     message += "⚠️ DyOR. Never share private keys or seed phrases."
     
     try:
