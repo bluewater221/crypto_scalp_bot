@@ -317,13 +317,7 @@ class NewsManager:
                         # Airdrop summary
                         summary = entry.get('summary') or entry.get('description') or ""
 
-                        airdrops.append({
-                            'title': entry.title,
-                            'summary': summary[:150] + "..." if len(summary) > 150 else summary,
-                            'link': entry.link,
-                            'source': datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                            'publisher': 'AirdropAlert',
-                            'type': 'AIRDROP',
+
                         # Analyze Sentiment & Check Cost
                         analysis_result = self.analyze_sentiment(entry.title, summary, check_cost=True)
                         
