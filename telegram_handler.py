@@ -147,7 +147,14 @@ async def send_news(bot: Bot, news_item, market_type):
     
     try:
         # Check if there is an image to send
-        if news_item.get('image_url'):
+        # Check if there is an image to send
+        # User Request: "remove image feature only for charts and imp"
+        # Since 'imp' (Important) is subjective and not flagged, we restrict to CHART type for now.
+        show_image = False
+        if news_item.get('type') == 'CHART':
+             show_image = True
+
+        if show_image and news_item.get('image_url'):
              await bot.send_photo(
                 chat_id=channel_id,
                 photo=news_item['image_url'],
