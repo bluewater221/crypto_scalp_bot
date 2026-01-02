@@ -43,8 +43,9 @@ RSI_OVERSOLD = 30
 RSI_OVERBOUGHT = 70
 CRYPTO_STOP_LOSS = 0.005 # 0.5%
 CRYPTO_TAKE_PROFIT = 0.01 # 1%
-CRYPTO_RISK_PER_TRADE = 0.005 # 0.5%
-INITIAL_CAPITAL_CRYPTO = 100 # USD
+CRYPTO_RISK_PER_TRADE = 0.95 # 95% Risk for micro account (5 USDT) to ensure trade size > minimum
+INITIAL_CAPITAL_CRYPTO = 5 # USD (User Real Balance)
+MIN_TRADE_AMOUNT_CRYPTO = 5 # Binance Min
 
 # --- Stock Configuration (Indian Markets) ---
 # NIFTY500 or selected highly liquid stocks. 
@@ -77,8 +78,8 @@ EMA_FAST = 9
 EMA_SLOW = 21
 STOCK_STOP_LOSS = 0.005
 STOCK_TAKE_PROFIT = 0.015 # 1.5R Minimum
-STOCK_RISK_PER_TRADE = 0.005 
-INITIAL_CAPITAL_STOCK = 10000 # INR 
+STOCK_RISK_PER_TRADE = 0.01 # 1% Risk (approx 300 INR per trade)
+INITIAL_CAPITAL_STOCK = 30000 # INR (User Real Balance)
 EMA_CROSS_THRESHOLD = 0.001 # 0.1% Separation required 
 
 
