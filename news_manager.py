@@ -14,6 +14,7 @@ try:
     from groq import Groq
 except ImportError:
     Groq = None
+from openai import OpenAI
 import market_data
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class NewsManager:
         else:
              logger.warning("ℹ️ Gemini API Key missing. Skipping AI analysis.")
 
-        # Configure Groq (Fallback)
+        # Configure Groq (Fallback 1)
         self.groq_client = None
         if config.GROQ_API_KEY and Groq:
             try:
@@ -56,6 +57,30 @@ class NewsManager:
                 logger.error(f"Failed to config Groq: {e}")
         elif not config.GROQ_API_KEY:
              logger.warning("ℹ️ Groq API Key missing.")
+
+        # Configure OpenRouter (Fallback 2 - DeepSeek/Qwen)
+        self.openrouter_client = None
+        if config.OPENROUTER_API_KEY:
+            try:
+                self.openrouter_client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=config.OPENROUTER_API_KEY,
+                )
+                logger.info("✅ OpenRouter AI Initialized")
+            except Exception as e:
+                logger.error(f"Failed to config OpenRouter: {e}")
+
+        # Configure OpenRouter (Fallback 2 - DeepSeek/Qwen)
+        self.openrouter_client = None
+        if config.OPENROUTER_API_KEY:
+            try:
+                self.openrouter_client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=config.OPENROUTER_API_KEY,
+                )
+                logger.info("✅ OpenRouter AI Initialized")
+            except Exception as e:
+                logger.error(f"Failed to config OpenRouter: {e}")
 
     def load_seen_news(self):
         if os.path.exists(self.seen_file):
@@ -176,7 +201,30 @@ class NewsManager:
                 return result
             except Exception as e:
                 logger.warning(f"Groq Analysis failed: {e}")
-                # Fallthrough to TextBlob
+                # Fallthrough to next AI
+
+         # 3. Try OpenRouter (DeepSeek/Qwen Fallback)
+        if self.openrouter_client and should_use_ai:
+            try:
+                # Simplified prompt for DeepSeek/Qwen via OpenRouter
+                prompt_content = f"Analyze this news and return JSON ONLY. Text: {text}. Keys: sentiment(BULLISH/BEARISH/NEUTRAL), price_prediction, reasoning."
+                
+                completion = self.openrouter_client.chat.completions.create(
+                    model="deepseek/deepseek-chat", # Cheap & Powerful
+                    messages=[{"role": "user", "content": prompt_content}]
+                )
+                
+                raw_content = completion.choices[0].message.content
+                if "```json" in raw_content:
+                    raw_content = raw_content.split("```json")[1].split("```")[0]
+                
+                ai_data = json.loads(raw_content)
+                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
+                result['ai_insight'] = f"🧠 AI (DeepSeek): {ai_data.get('reasoning', 'Analyzed')}"
+                return result
+
+            except Exception as e:
+                logger.warning(f"OpenRouter Analysis failed: {e}")
  
         # 2. TextBlob Fallback
         analysis = TextBlob(text)

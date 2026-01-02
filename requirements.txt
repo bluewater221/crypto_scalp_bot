@@ -18,3 +18,4 @@ groq
 kiteconnect
 lxml>=4.9.0
 packaging
+openai>=1.0.0
