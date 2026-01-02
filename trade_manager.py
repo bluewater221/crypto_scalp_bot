@@ -178,7 +178,14 @@ class TradeManager:
                 if entry == sl: continue
 
                 # Quantity
-                qty = risk_amt / abs(entry - sl)
+                # Standard Position Sizing = Risk / Distance_to_SL
+                raw_position_value = risk_amt / (abs(entry - sl) / entry)
+                
+                # Spot Market Constraint: Max Position <= Balance
+                # (Assuming no leverage)
+                actual_position_val = min(raw_position_value, balance)
+                
+                qty = actual_position_val / entry
                 
                 # Realized PnL
                 if t['side'] == 'LONG':
