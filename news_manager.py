@@ -18,6 +18,15 @@ import market_data
 
 logger = logging.getLogger(__name__)
 
+# Smart Filter: Only use AI for high-impact news to save quota
+HIGH_IMPACT_KEYWORDS = [
+    "earnings", "profit", "loss", "revenue", "quarter", "q1", "q2", "q3", "q4",
+    "acquisition", "merger", "deal", "partnership",
+    "sec", "rbi", "fed", "rate", "inflation", "cpi", "gdp",
+    "breakout", "ath", "all time high", "crash", "correction",
+    "listing", "delisting", "binance", "coinbase", "mainnet", "airdrop"
+]
+
 class NewsManager:
     def __init__(self):
         self.seen_file = 'seen_news.json'
@@ -79,7 +88,17 @@ class NewsManager:
         if not full_text: return result
         
         # 1. Try Gemini AI (Primary)
-        if self.use_ai:
+        # Smart Filter: Skip AI for routine news unless necessary (or airdrop usage)
+        should_use_ai = check_cost # Always use AI for Airdrops (verify cost/complexity)
+        if not should_use_ai:
+            matches = [w for w in HIGH_IMPACT_KEYWORDS if w in full_text.lower()]
+            if matches:
+                should_use_ai = True
+                logger.info(f"⚡ Smart Trigger: Using AI for '{matches[0]}'")
+            else:
+                logger.debug("Skipping AI for routine news (Quota Saver)")
+
+        if self.use_ai and should_use_ai:
             try:
                 cost_prompt = ""
                 if check_cost:
@@ -121,7 +140,7 @@ class NewsManager:
                 # Fallthrough to next AI
 
         # 2. Try Groq AI (Secondary Fallback)
-        if self.groq_client:
+        if self.groq_client and should_use_ai:
             try:
                 cost_prompt = ""
                 if check_cost:
