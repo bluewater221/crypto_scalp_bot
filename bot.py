@@ -336,14 +336,27 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.info("Scanning STOCKS...")
+    success_count = 0
+    fail_count = 0
+    failed_symbols = []
+    
     for symbol in config.STOCK_SYMBOLS:
         try:
             signal = await signals.analyze_stock(symbol)
             if signal:
                 await telegram_handler.send_signal(context.bot, signal, 'STOCK')
                 trade_mgr.open_trade(signal)
+            success_count += 1
         except Exception as e:
-            logger.error(f"Error scanning {symbol}: {e}")
+            fail_count += 1
+            failed_symbols.append(symbol)
+            logger.warning(f"Failed to scan {symbol}: {type(e).__name__}")
+    
+    # Log summary
+    if fail_count > 0:
+        logger.warning(f"Stock scan complete: {success_count} OK, {fail_count} failed: {', '.join(failed_symbols)}")
+    else:
+        logger.info(f"Stock scan complete: {success_count}/{len(config.STOCK_SYMBOLS)} symbols scanned")
 
 # --- Trade Manager Job ---
 async def check_trades(context: ContextTypes.DEFAULT_TYPE):

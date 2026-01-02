@@ -69,10 +69,10 @@ async def fetch_stock_data(symbol, timeframe=config.STOCK_TIMEFRAME, period='5d'
     try:
         # 3. yfinance Fallback (Reliable Intraday)
         # yfinance download is blocking, run in thread
-        # yfinance download is blocking, run in thread
         df = await asyncio.to_thread(yf.download, tickers=symbol, period=period, interval=timeframe, progress=False)
         
         if df is None or df.empty:
+            logger.warning(f"No data returned for {symbol} - ticker may be delisted or symbol incorrect")
             return None
             
         # Handle multi-index columns which occur in newer yfinance versions
@@ -83,6 +83,12 @@ async def fetch_stock_data(symbol, timeframe=config.STOCK_TIMEFRAME, period='5d'
         # Standardize column names to lowercase
         df.columns = [str(col).lower() for col in df.columns]
         
+        # Validate we have required columns
+        required_cols = ['open', 'high', 'low', 'close', 'volume']
+        if not all(col in df.columns for col in required_cols):
+            logger.warning(f"Missing required columns for {symbol}. Got: {list(df.columns)}")
+            return None
+        
         # Map timestamp
         if 'datetime' in df.columns:
             df.rename(columns={'datetime': 'timestamp'}, inplace=True)
@@ -91,7 +97,11 @@ async def fetch_stock_data(symbol, timeframe=config.STOCK_TIMEFRAME, period='5d'
             
         return df
     except Exception as e:
-        logger.error(f"Error fetching stock data for {symbol}: {e}")
+        error_msg = str(e).lower()
+        if 'delisted' in error_msg or 'no price data' in error_msg or 'no data found' in error_msg:
+            logger.warning(f"⚠️ Ticker {symbol} appears to be delisted or has no data - skipping")
+        else:
+            logger.error(f"Error fetching stock data for {symbol}: {e}")
         return None
 
 # --- Indicator Calculation ---
