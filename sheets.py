@@ -8,17 +8,30 @@ import json
 logger = logging.getLogger(__name__)
 
 def get_gspread_client():
-    """Authenticates with Google Sheets."""
+    """Authenticates with Google Sheets via File OR Env Var JSON."""
     try:
-        # Check if JSON file exists, if not check for ENV content
-        if not os.path.exists(config.GOOGLE_SHEETS_JSON):
-            logger.warning("Google Sheets JSON not found. Logging skipped.")
-            return None
-            
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(config.GOOGLE_SHEETS_JSON, scope)
-        client = gspread.authorize(creds)
-        return client
+        
+        # 1. Try Configured File Path
+        if os.path.exists(config.GOOGLE_SHEETS_JSON):
+            creds = ServiceAccountCredentials.from_json_keyfile_name(config.GOOGLE_SHEETS_JSON, scope)
+            return gspread.authorize(creds)
+            
+        # 2. Try JSON String in Environment Variable
+        # Sometimes config.GOOGLE_SHEETS_JSON might hold the content itself if user pasted it there
+        # Or check a dedicated env var if config logic didn't capture it
+        json_content = os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON')
+        if json_content and json_content.strip().startswith('{'):
+            try:
+                creds_dict = json.loads(json_content)
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+                return gspread.authorize(creds)
+            except json.JSONDecodeError:
+                logger.warning("Env Var 'GOOGLE_SHEETS_CREDENTIALS_JSON' is not valid JSON.")
+
+        logger.warning(f"Google Sheets Creds not found. Checked file '{config.GOOGLE_SHEETS_JSON}' and Env Var.")
+        return None
+
     except Exception as e:
         logger.error(f"Google Sheets Auth Error: {e}")
         return None
