@@ -18,6 +18,7 @@ TELEGRAM_STOCK_PNL_CHANNEL_ID = os.getenv('TELEGRAM_STOCK_PNL_CHANNEL_ID')   # P
 TELEGRAM_LOG_CHANNEL_ID = os.getenv('TELEGRAM_LOG_CHANNEL_ID')       # @scalper_logs (Optional)
 CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
 
 # Google Sheets

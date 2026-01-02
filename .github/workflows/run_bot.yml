@@ -42,6 +42,7 @@ jobs:
         TELEGRAM_STOCK_PNL_CHANNEL_ID: ${{ secrets.TELEGRAM_STOCK_PNL_CHANNEL_ID }}
         GOOGLE_SHEETS_CREDENTIALS_JSON: "google_creds.json"
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         CRYPTOPANIC_API_KEY: ${{ secrets.CRYPTOPANIC_API_KEY }}
         PAPER_TRADING: "True"
       run: |

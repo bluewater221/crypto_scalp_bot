@@ -10,6 +10,10 @@ import os
 import dateutil.parser
 from textblob import TextBlob
 from google import genai
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 import market_data
 
 logger = logging.getLogger(__name__)
@@ -28,6 +32,14 @@ class NewsManager:
                 self.use_ai = True
             except Exception as e:
                 logger.error(f"Failed to config Gemini: {e}")
+
+        # Configure Groq (Fallback)
+        self.groq_client = None
+        if config.GROQ_API_KEY and Groq:
+            try:
+                self.groq_client = Groq(api_key=config.GROQ_API_KEY)
+            except Exception as e:
+                logger.error(f"Failed to config Groq: {e}")
 
     def load_seen_news(self):
         if os.path.exists(self.seen_file):
@@ -59,7 +71,7 @@ class NewsManager:
         full_text = f"{text}. {description}" if description else text
         if not full_text: return result
         
-        # 1. Try Gemini AI
+        # 1. Try Gemini AI (Primary)
         if self.use_ai:
             try:
                 cost_prompt = ""
@@ -83,7 +95,7 @@ class NewsManager:
                 
                 result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
                 result['ai_insight'] = (
-                    f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
+                    f"🤖 AI (Gemini) Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
                     f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
                 )
                 result['companies'] = ai_data.get('companies', [])
@@ -98,7 +110,46 @@ class NewsManager:
                 return result
 
             except Exception as e:
-                logger.error(f"Gemini Analysis failed: {e}")
+                logger.warning(f"Gemini Analysis failed (possibly quota): {e}")
+                # Fallthrough to next AI
+
+        # 2. Try Groq AI (Secondary Fallback)
+        if self.groq_client:
+            try:
+                cost_prompt = ""
+                if check_cost:
+                    cost_prompt = "low_cost (boolean), requires_premium_x (boolean), is_telegram_app (boolean), "
+
+                prompt = (
+                    f"Analyze this financial news and return JSON ONLY:\nTitle: {text}\n"
+                    f"Keys: sentiment(BULLISH/BEARISH/NEUTRAL), price_prediction, reasoning, {cost_prompt}"
+                    f"estimated_value, requirements, companies(list), is_india_macro(boolean)."
+                )
+                
+                chat_completion = self.groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="llama-3.3-70b-versatile", # High quality free tier model
+                    response_format={"type": "json_object"}
+                )
+                
+                ai_data = json.loads(chat_completion.choices[0].message.content)
+                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
+                result['ai_insight'] = (
+                    f"🤖 AI (Groq) Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
+                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
+                )
+                result['companies'] = ai_data.get('companies', [])
+                result['is_india_macro'] = ai_data.get('is_india_macro', False)
+                
+                if check_cost:
+                    result['low_cost'] = ai_data.get('low_cost', True)
+                    result['requires_premium_x'] = ai_data.get('requires_premium_x', False)
+                    result['is_telegram_app'] = ai_data.get('is_telegram_app', False)
+                    result['estimated_value'] = ai_data.get('estimated_value', 'Unknown')
+                    result['requirements'] = ai_data.get('requirements', 'None')
+                return result
+            except Exception as e:
+                logger.warning(f"Groq Analysis failed: {e}")
                 # Fallthrough to TextBlob
  
         # 2. TextBlob Fallback

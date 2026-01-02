@@ -7,71 +7,93 @@ import market_data
 import utils
 import sheets
 from google import genai
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 import json
 import os
 
 logger = logging.getLogger(__name__)
 
-# Initialize Gemini Client (Singleton)
+# AI Clients (Singletons)
 _genai_client = None
+_groq_client = None
+
 def get_genai_client():
     global _genai_client
     if _genai_client is None and config.GEMINI_API_KEY:
         _genai_client = genai.Client(api_key=config.GEMINI_API_KEY)
     return _genai_client
 
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None and config.GROQ_API_KEY and Groq:
+        _groq_client = Groq(api_key=config.GROQ_API_KEY)
+    return _groq_client
+
 async def validate_with_ai(symbol, market_type, signal, setup, df):
     """
-    Asks Gemini to validate the technical signal.
+    Asks AI (Gemini or Groq) to validate the technical signal.
     """
-    client = get_genai_client()
-    if not client:
-        return {'confidence': 'N/A', 'reasoning': 'AI Key missing'}
+    gemini = get_genai_client()
+    groq = get_groq_client()
+    
+    if not gemini and not groq:
+        return {'confidence': 'N/A', 'reasoning': 'AI Keys missing', 'verdict': 'APPROVED'}
 
-    max_retries = 3
-    for attempt in range(max_retries):
+    # Technical Context
+    recent_data = df.tail(5).to_string()
+    prompt = (
+        f"Act as a Senior Trading Analyst. Validate this scalping signal:\n"
+        f"Asset: {symbol} ({market_type})\n"
+        f"Signal: {signal}\n"
+        f"Setup: {setup}\n\n"
+        f"Recent Price Action (OHLCV + Indicators):\n{recent_data}\n\n"
+        f"Analyze the Trend, Momentum (RSI), and Volume profile.\n"
+        f"Return ONLY a JSON object with keys:\n"
+        f"- confidence (0-100 score, integer)\n"
+        f"- reasoning (concise explanation, max 20 words)\n"
+        f"- verdict (APPROVED or REJECTED)"
+    )
+
+    # 1. Try Gemini
+    if gemini:
         try:
-            # Prepare Technical Context (Last 5 candles)
-            recent_data = df.tail(5).to_string()
-            
-            prompt = (
-                f"Act as a Senior Trading Analyst. Validate this scalping signal:\n"
-                f"Asset: {symbol} ({market_type})\n"
-                f"Signal: {signal}\n"
-                f"Setup: {setup}\n\n"
-                f"Recent Price Action (OHLCV + Indicators):\n{recent_data}\n\n"
-                f"Analyze the Trend, Momentum (RSI), and Volume profile.\n"
-                f"Return ONLY a JSON object with keys:\n"
-                f"- confidence (0-100 score, integer)\n"
-                f"- reasoning (concise explanation, max 20 words)\n"
-                f"- verdict (APPROVED or REJECTED)"
-            )
-            
-            # Run in thread to not block async loop
             response = await asyncio.to_thread(
-                client.models.generate_content,
+                gemini.models.generate_content,
                 model='gemini-2.0-flash',
                 contents=prompt
             )
-            
-            # Clean JSON
             raw_text = response.text.replace('```json', '').replace('```', '').strip()
             data = json.loads(raw_text)
-            
             return {
-                'confidence': f"{data.get('confidence', 0)}%",
+                'confidence': f"{data.get('confidence', 0)}% (G)",
                 'reasoning': data.get('reasoning', 'No reasoning'),
-                'verdict': data.get('verdict', 'APPROVED') # Default to approve if unsure
+                'verdict': data.get('verdict', 'APPROVED')
             }
-            
         except Exception as e:
-            logger.warning(f"AI Attempt {attempt+1}/{max_retries} Failed: {e}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(2) # Backoff
-            else:
-                logger.error(f"AI Validation Failed after retries: {e}")
-                
-    # Fallback after retries (Don't block the trade, just warn)
+            logger.warning(f"Gemini validation failed: {e}")
+
+    # 2. Try Groq Fallback
+    if groq:
+        try:
+            chat_completion = await asyncio.to_thread(
+                groq.chat.completions.create,
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(chat_completion.choices[0].message.content)
+            return {
+                'confidence': f"{data.get('confidence', 0)}% (Q)",
+                'reasoning': data.get('reasoning', 'No reasoning'),
+                'verdict': data.get('verdict', 'APPROVED')
+            }
+        except Exception as e:
+            logger.warning(f"Groq validation failed: {e}")
+
+    # Fallback after both fail
     return {'confidence': 'Error', 'reasoning': 'AI Unresponsive', 'verdict': 'APPROVED'}
 
 
