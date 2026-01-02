@@ -35,6 +35,10 @@ app_flask = Flask(__name__)
 def ping():
     return "Bot alive! 🟢", 200
 
+@app_flask.route('/')
+def home():
+    return "<h1>🚀 Scalp Bot is Running!</h1><p>Status: Active 🟢</p><p>Check Telegram for updates.</p>", 200
+
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app_flask.run(host='0.0.0.0', port=port)

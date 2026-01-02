@@ -17,3 +17,4 @@ google-genai>=0.4.0
 groq
 kiteconnect
 lxml>=4.9.0
+packaging

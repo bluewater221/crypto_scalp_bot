@@ -23,6 +23,7 @@ class NewsManager:
         self.seen_file = 'seen_news.json'
         self.seen_news_ids = self.load_seen_news()
         
+
         # Configure Gemini (New SDK)
         self.client = None
         self.use_ai = False
@@ -30,16 +31,22 @@ class NewsManager:
             try:
                 self.client = genai.Client(api_key=config.GEMINI_API_KEY)
                 self.use_ai = True
+                logger.info("✅ Gemini AI Initialized")
             except Exception as e:
                 logger.error(f"Failed to config Gemini: {e}")
+        else:
+             logger.warning("ℹ️ Gemini API Key missing. Skipping AI analysis.")
 
         # Configure Groq (Fallback)
         self.groq_client = None
         if config.GROQ_API_KEY and Groq:
             try:
                 self.groq_client = Groq(api_key=config.GROQ_API_KEY)
+                logger.info("✅ Groq AI Initialized")
             except Exception as e:
                 logger.error(f"Failed to config Groq: {e}")
+        elif not config.GROQ_API_KEY:
+             logger.warning("ℹ️ Groq API Key missing.")
 
     def load_seen_news(self):
         if os.path.exists(self.seen_file):

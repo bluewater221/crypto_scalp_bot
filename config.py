@@ -26,6 +26,8 @@ GOOGLE_SHEETS_JSON = os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON', 'credentials.js
 GOOGLE_SHEET_NAME = os.getenv('GOOGLE_SHEET_NAME', 'Scalper_Logs')
 
 
+
+
 # --- Crypto Configuration (Public Data) ---
 # --- Crypto Configuration (Public Data) ---
 CRYPTO_PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT']
@@ -50,7 +52,7 @@ STOCK_SYMBOLS = [
     # --- Major Stocks ---
     'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'SBIN.NS', 'ICICIBANK.NS',
     'AXISBANK.NS', 'KOTAKBANK.NS', 'LT.NS', 'HINDUNILVR.NS', 'ITC.NS', 'BAJFINANCE.NS', 
-    'MARUTI.NS', 'TATAMOTORS.NS',
+    'MARUTI.NS',
     
     # --- Index ETFs ---
     'NIFTYBEES.NS', 'BANKBEES.NS', 'JUNIORBEES.NS', 'MID150BEES.NS', 'CPSEETF.NS',
@@ -92,3 +94,14 @@ KITE_ACCESS_TOKEN = None
 # --- News & Airdrop Configuration ---
 NEWS_CHECK_INTERVAL = 14400 # 4 hours (Was 30 mins) - "Less News"
 AIRDROP_CHECK_INTERVAL = 86400 # 24 hours (Was 6 hours)
+
+def check_config():
+    print("--- Configuration Check ---")
+    print(f"TELEGRAM_BOT_TOKEN: {'✅ Set' if TELEGRAM_BOT_TOKEN else '❌ Missing'}")
+    print(f"GEMINI_API_KEY: {'✅ Set' if GEMINI_API_KEY else '⚠️ Missing (AI Disabled)'}")
+    print(f"GROQ_API_KEY: {'✅ Set' if GROQ_API_KEY else '⚠️ Missing (AI Disabled)'}")
+    print(f"CRYPTO_PAIRS: {len(CRYPTO_PAIRS)} configured")
+    print(f"STOCK_SYMBOLS: {len(STOCK_SYMBOLS)} configured")
+    print("---------------------------")
+
+check_config()
