@@ -25,8 +25,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global Services
+# Global Services
 news_service = news_manager.NewsManager()
-trade_mgr = trade_manager.TradeManager()
+
+# Init Trade Managers
+spot_mgr = trade_manager.TradeManager(
+    market_tag='CRYPTO_SPOT',
+    trades_file='trades_spot.json',
+    history_file='history_spot.json',
+    initial_capital=config.INITIAL_CAPITAL_CRYPTO_SPOT,
+    leverage=1
+)
+
+future_mgr = trade_manager.TradeManager(
+    market_tag='CRYPTO_FUTURE',
+    trades_file='trades_future.json',
+    history_file='history_future.json',
+    initial_capital=config.INITIAL_CAPITAL_CRYPTO_FUTURE,
+    leverage=config.FUTURE_LEVERAGE
+)
+
+stock_mgr = trade_manager.TradeManager(
+    market_tag='STOCK',
+    trades_file='trades_stock.json',
+    history_file='history_stock.json',
+    initial_capital=config.INITIAL_CAPITAL_STOCK,
+    leverage=1
+)
 
 # --- Flask Keep-Alive ---
 app_flask = Flask(__name__)
@@ -56,8 +81,12 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show performance stats."""
-    stats = trade_mgr.get_stats()
-    await update.message.reply_text(stats, parse_mode='Markdown')
+    stats_msg = "**📊 Unified Portfolio Stats**\n\n"
+    stats_msg += spot_mgr.get_stats() + "\n"
+    stats_msg += future_mgr.get_stats() + "\n"
+    stats_msg += stock_mgr.get_stats()
+    
+    await update.message.reply_text(stats_msg, parse_mode='Markdown')
 
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Test command to check if bot is responsive and config is loaded."""
@@ -321,6 +350,11 @@ async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.info("Scanning CRYPTO...")
+    
+    # Check Balance (Will auto-credit if low)
+    spot_mgr.check_balance_sufficiency()
+    future_mgr.check_balance_sufficiency()
+
     exchange = market_data.get_crypto_exchange()
     if not exchange: return
 
@@ -329,7 +363,17 @@ async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
             signal = await signals.analyze_crypto(exchange, symbol)
             if signal:
                 await telegram_handler.send_signal(context.bot, signal, 'CRYPTO')
-                trade_mgr.open_trade(signal)
+                
+                # Routing Logic
+                if signal['side'] == 'LONG':
+                    if config.ENABLE_SPOT_TRADING:
+                        spot_mgr.open_trade(signal)
+                    if config.ENABLE_FUTURES_TRADING:
+                        future_mgr.open_trade(signal)
+                elif signal['side'] == 'SHORT':
+                    if config.ENABLE_FUTURES_TRADING:
+                        future_mgr.open_trade(signal)
+                        
         except Exception as e:
             logger.error(f"Error scanning {symbol}: {e}")
 
@@ -340,6 +384,10 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.info("Scanning STOCKS...")
+    
+    # Check Balance (Will auto-credit if low)
+    stock_mgr.check_balance_sufficiency()
+
     success_count = 0
     fail_count = 0
     failed_symbols = []
@@ -349,7 +397,7 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
             signal = await signals.analyze_stock(symbol)
             if signal:
                 await telegram_handler.send_signal(context.bot, signal, 'STOCK')
-                trade_mgr.open_trade(signal)
+                stock_mgr.open_trade(signal)
             success_count += 1
         except Exception as e:
             fail_count += 1
@@ -365,7 +413,9 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
 # --- Trade Manager Job ---
 async def check_trades(context: ContextTypes.DEFAULT_TYPE):
     """Update active trades."""
-    await trade_mgr.update_trades(context.bot)
+    await spot_mgr.update_trades(context.bot)
+    await future_mgr.update_trades(context.bot)
+    await stock_mgr.update_trades(context.bot)
 
 # --- News Job ---
 # news_service is global

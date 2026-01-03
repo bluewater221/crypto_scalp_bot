@@ -10,20 +10,27 @@ import sheets
 
 logger = logging.getLogger(__name__)
 
-TRADES_FILE = "active_trades.json"
-HISTORY_FILE = "trade_history.json"
-
 class TradeManager:
-    def __init__(self):
-        self.active_trades = self.load_trades(TRADES_FILE)
+    def __init__(self, market_tag, trades_file, history_file, initial_capital, leverage=1):
+        self.market_tag = market_tag
+        self.trades_file = trades_file
+        self.history_file = history_file
+        self.initial_capital = initial_capital
+        self.leverage = leverage
+        self.currency = "₹" if 'STOCK' in market_tag else "$"
+        
+        self.active_trades = self.load_trades(self.trades_file)
         
         # Try to restore history from Google Sheets (Persistent Storage)
+        # We might need to filter sheet history by market_tag if sharing a sheet
         sheet_history = sheets.fetch_trade_history()
+        
         if sheet_history:
-            self.history = sheet_history
-            logging.info(f"✅ Restored {len(self.history)} trades from Google Sheets.")
+             # Filter only trades relevant to this manager
+             self.history = [t for t in sheet_history if t.get('market') == self.market_tag]
+             logging.info(f"[{self.market_tag}] ✅ Restored {len(self.history)} trades from Sheet.")
         else:
-            self.history = self.load_trades(HISTORY_FILE)
+             self.history = self.load_trades(self.history_file)
 
     def load_trades(self, filename):
         if os.path.exists(filename):
@@ -36,29 +43,39 @@ class TradeManager:
 
     def save_trades(self):
         try:
-            with open(TRADES_FILE, 'w') as f:
+            with open(self.trades_file, 'w') as f:
                 json.dump(self.active_trades, f, indent=4)
-            with open(HISTORY_FILE, 'w') as f:
+            with open(self.history_file, 'w') as f:
                 json.dump(self.history, f, indent=4)
         except Exception as e:
-            logger.error(f"Failed to save trades: {e}")
+            logger.error(f"Failed to save {self.trades_file}: {e}")
 
     def open_trade(self, signal_data):
-        """Registers a new trade to track."""
+        """register a new trade for this specific manager."""
+        # Risk Pct
+        if 'STOCK' in self.market_tag:
+             risk_pct = config.STOCK_RISK_PER_TRADE
+        else:
+             risk_pct = config.CRYPTO_RISK_PER_TRADE
+        
+        # Create Unique ID
+        trade_id = f"{signal_data['symbol']}_{self.market_tag}_{int(datetime.now().timestamp())}"
+        
         trade = {
-            'id': f"{signal_data['symbol']}_{int(datetime.now().timestamp())}",
+            'id': trade_id,
             'symbol': signal_data['symbol'],
-            'market': signal_data['market'],
+            'market': self.market_tag,
             'side': signal_data['side'],
             'entry': signal_data['entry'],
             'tp': signal_data['take_profit'],
             'sl': signal_data['stop_loss'],
             'status': 'OPEN',
-            'open_time': signal_data['timestamp']
+            'open_time': signal_data['timestamp'],
+            'risk_pct': risk_pct
         }
         self.active_trades.append(trade)
         self.save_trades()
-        logger.info(f"Opened Trade: {trade['id']}")
+        logger.info(f"Opened Trade: {trade['id']} ({self.market_tag})")
 
     async def update_trades(self, bot):
         """Checks live price for all active trades."""
@@ -68,7 +85,8 @@ class TradeManager:
         for trade in self.active_trades[:]:
             try:
                 # Fetch current price
-                if trade['market'] == 'CRYPTO':
+                # Fetch current price
+                if 'CRYPTO' in trade['market']:
                     # Simplified: Use fetch_ohlcv to get latest close
                     exchange = market_data.get_crypto_exchange()
                     ticker = await asyncio.to_thread(exchange.fetch_ticker, trade['symbol'])
@@ -85,10 +103,10 @@ class TradeManager:
                 if trade['side'] == 'LONG':
                     if curr_price >= trade['tp']:
                         outcome = 'WIN'
-                        pnl = config.CRYPTO_TAKE_PROFIT if trade['market'] == 'CRYPTO' else config.STOCK_TAKE_PROFIT
+                        pnl = config.CRYPTO_TAKE_PROFIT if 'CRYPTO' in trade['market'] else config.STOCK_TAKE_PROFIT
                     elif curr_price <= trade['sl']:
                         outcome = 'LOSS'
-                        pnl = -1 * (config.CRYPTO_STOP_LOSS if trade['market'] == 'CRYPTO' else config.STOCK_STOP_LOSS)
+                        pnl = -1 * (config.CRYPTO_STOP_LOSS if 'CRYPTO' in trade['market'] else config.STOCK_STOP_LOSS)
                 elif trade['side'] == 'SHORT':
                      if curr_price <= trade['tp']:
                         outcome = 'WIN'
@@ -102,6 +120,8 @@ class TradeManager:
 
             except Exception as e:
                 logger.error(f"Error updating trade {trade['symbol']}: {e}")
+                # "Smart" self-healing: If ticker fetch fails repeatedly, we could auto-close or flag.
+                # For now, just logging error loudly.
 
     def close_trade(self, trade, outcome, close_price, pnl_pct, bot):
         trade['status'] = 'CLOSED'
@@ -109,6 +129,47 @@ class TradeManager:
         trade['close_price'] = close_price
         trade['close_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         trade['pnl_pct'] = pnl_pct
+        
+        # Calculate balance and usage BEFORE adding to history
+        # Calculate balance and usage BEFORE adding to history
+        balance_before = self.calculate_balance()
+        
+        # Risk Calc
+        risk_per_trade = trade.get('risk_pct', (config.CRYPTO_RISK_PER_TRADE if 'STOCK' not in self.market_tag else config.STOCK_RISK_PER_TRADE))
+        risk_amt = balance_before * risk_per_trade
+        
+        entry = trade['entry']
+        sl = trade['sl']
+        
+        if entry != sl:
+            # Position Sizing
+            dist_to_sl_pct = abs(entry - sl) / entry
+            raw_position_value = risk_amt / dist_to_sl_pct
+            
+            dist_to_sl_pct = abs(entry - sl) / entry
+            raw_position_value = risk_amt / dist_to_sl_pct
+            
+            if self.leverage > 1:
+                 max_buying_power = balance_before * self.leverage
+                 actual_position_val = min(raw_position_value, max_buying_power)
+                 margin_used = actual_position_val / self.leverage
+                 amount_used_display = margin_used
+            else:
+                 actual_position_val = min(raw_position_value, balance_before)
+                 amount_used_display = actual_position_val
+            
+            qty = actual_position_val / entry
+            
+            # Realized PnL Amount
+            if trade['side'] == 'LONG':
+                pnl_amt = (close_price - entry) * qty
+            else:
+                pnl_amt = (entry - close_price) * qty
+        else:
+            actual_position_val = 0
+            pnl_amt = 0
+            
+        balance_after = balance_before + pnl_amt
         
         self.active_trades.remove(trade)
         self.history.append(trade)
@@ -122,13 +183,19 @@ class TradeManager:
         msg = (
             f"{emoji} **TRADE CLOSED: {trade['symbol']}**\n"
             f"Result: {outcome}\n"
-            f"PnL: {pnl_pct*100:.2f}%\n"
-            f"Close: {close_price}"
+            f"{emoji} **TRADE CLOSED: {trade['symbol']}**\n"
+            f"Result: {outcome}\n"
+            f"PnL: {pnl_pct*100:.2f}% ({self.currency}{pnl_amt:,.2f})\n\n"
+            f"💰 **Portfolio Update ({self.market_tag})**\n"
+            f"Initial Capital: {self.currency}{self.initial_capital:,.2f}\n"
+            f"Amount Used: {self.currency}{amount_used_display:,.2f} {'(Margin)' if self.leverage > 1 else ''}\n"
+            f"New Balance: {self.currency}{balance_after:,.2f}\n\n"
+            f"Entry: {entry} | Exit: {close_price}"
         )
         
         # Route to PnL Channel
         channel_id = None
-        if trade['market'] == 'CRYPTO':
+        if 'CRYPTO' in trade['market']:
             channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID
         elif trade['market'] == 'STOCK':
              channel_id = config.TELEGRAM_STOCK_PNL_CHANNEL_ID
@@ -139,7 +206,7 @@ class TradeManager:
         
         # Final Fallback: Send to the Main Signal Channel (so checking PnL is possible)
         if not channel_id:
-             if trade['market'] == 'CRYPTO':
+             if 'CRYPTO' in trade['market']:
                 channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
              else:
                 channel_id = config.TELEGRAM_STOCK_CHANNEL_ID
@@ -149,24 +216,18 @@ class TradeManager:
         else:
              logger.info(f"Trade Closed ({outcome}): {trade['symbol']} (No Channel set)")
 
-    def calculate_balance(self, market_type):
+    def calculate_balance(self):
         """Calculates current balance based on initial capital and trade history (Compounding)."""
-        if market_type == 'CRYPTO':
-            balance = config.INITIAL_CAPITAL_CRYPTO
-            currency = "$"
-        else:
-            balance = config.INITIAL_CAPITAL_STOCK
-            currency = "₹"
-            
-        trades = [t for t in self.history if t['market'] == market_type]
+        balance = self.initial_capital
         
-        for t in trades:
+        for t in self.history:
             try:
+                # Handle CREDIT entries (Paper Trading top-ups)
+                if t.get('side') == 'CREDIT':
+                    balance += t.get('credit_amount', 0)
+                    continue
+                    
                 # Standard Risk Management Calculation
-                # Risk Amount = Balance * Risk % (e.g. 0.5%)
-                # Position Size = Risk Amount / |Entry - SL|
-                # PnL = (Exit - Entry) * Size
-                
                 risk_per_trade = t.get('risk_pct', 0.005)
                 risk_amt = balance * risk_per_trade
                 
@@ -178,12 +239,18 @@ class TradeManager:
                 if entry == sl: continue
 
                 # Quantity
-                # Standard Position Sizing = Risk / Distance_to_SL
-                raw_position_value = risk_amt / (abs(entry - sl) / entry)
+                dist_to_sl_pct = abs(entry - sl) / entry
+                if dist_to_sl_pct == 0: continue
                 
-                # Spot Market Constraint: Max Position <= Balance
-                # (Assuming no leverage)
-                actual_position_val = min(raw_position_value, balance)
+                raw_position_value = risk_amt / dist_to_sl_pct
+                
+                if self.leverage > 1:
+                    # Leverage Logic
+                    max_buying_power = balance * self.leverage
+                    actual_position_val = min(raw_position_value, max_buying_power)
+                else:
+                    # Spot Logic
+                    actual_position_val = min(raw_position_value, balance)
                 
                 qty = actual_position_val / entry
                 
@@ -194,42 +261,61 @@ class TradeManager:
                     pnl = (entry - exit_price) * qty
                 
                 balance += pnl
+
             except Exception as e:
                 logger.error(f"Error calculating balance for trade {t.get('symbol')}: {e}")
                 
-        return balance, currency
+        return balance
+
+    def check_balance_sufficiency(self):
+        """Checks balance and adds credit if below minimum (Paper Trading Mode)."""
+        balance = self.calculate_balance()
+        
+        if 'STOCK' not in self.market_tag:
+            min_required = config.MIN_TRADE_AMOUNT_CRYPTO
+            credit_amount = 5  # $5 credit
+        else:
+            min_required = 1000
+            credit_amount = 1000  # ₹1000 credit
+            
+        if balance < min_required:
+            # Add credit by inserting a "deposit" into history
+            self.history.append({
+                'id': f'CREDIT_{self.market_tag}_{int(datetime.now().timestamp())}',
+                'symbol': 'CREDIT',
+                'market': self.market_tag,
+                'side': 'CREDIT',
+                'entry': 0,
+                'close_price': 0,
+                'tp': 0,
+                'sl': 0,
+                'status': 'CREDIT',
+                'outcome': 'CREDIT',
+                'pnl_pct': 0,
+                'credit_amount': credit_amount,
+                'open_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'close_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'risk_pct': 0
+            })
+            self.save_trades()
+            logger.info(f"💰 Auto-Credit: Added {self.currency}{credit_amount} to {self.market_tag} portfolio (Balance was {self.currency}{balance:.2f})")
+            balance += credit_amount
+            
+        return True, balance, min_required
 
     def get_stats(self):
         if not self.history:
-            return (
-                "📊 **Portfolio Status**\n"
-                f"Stocks: ₹{config.INITIAL_CAPITAL_STOCK:,.2f} (Start)\n"
-                f"Crypto: ${config.INITIAL_CAPITAL_CRYPTO:,.2f} (Start)\n\n"
-                "No trades closed yet."
-            )
-        
-        # Calculate Balances
-        stock_bal, stock_curr = self.calculate_balance('STOCK')
-        crypto_bal, crypto_curr = self.calculate_balance('CRYPTO')
-        
-        # Calculate Growth
-        stock_growth = ((stock_bal - config.INITIAL_CAPITAL_STOCK) / config.INITIAL_CAPITAL_STOCK) * 100
-        crypto_growth = ((crypto_bal - config.INITIAL_CAPITAL_CRYPTO) / config.INITIAL_CAPITAL_CRYPTO) * 100
+             return f"[{self.market_tag}] No trades yet. Start: {self.currency}{self.initial_capital}"
+
+        balance = self.calculate_balance()
+        growth = ((balance - self.initial_capital) / self.initial_capital) * 100
         
         wins = len([t for t in self.history if t['outcome'] == 'WIN'])
         total = len(self.history)
-        win_rate = (wins / total) * 100
+        win_rate = (wins / total) * 100 if total > 0 else 0
         
-        stats = (
-            f"📊 **Portfolio Performance**\n\n"
-            f"📈 **Stocks**\n"
-            f"Balance: {stock_curr}{stock_bal:,.2f}\n"
-            f"Growth: {stock_growth:+.2f}%\n\n"
-            f"💰 **Crypto**\n"
-            f"Balance: {crypto_curr}{crypto_bal:,.2f}\n"
-            f"Growth: {crypto_growth:+.2f}%\n\n"
-            f"🏆 **Trade Stats**\n"
-            f"Win Rate: {win_rate:.1f}% ({wins}/{total})\n"
-            f"Total Trades: {total}"
+        return (
+            f"📈 **{self.market_tag}**\n"
+            f"Balance: {self.currency}{balance:,.2f} ({growth:+.2f}%)\n"
+            f"Wins: {wins}/{total} ({win_rate:.1f}%)\n"
         )
-        return stats
