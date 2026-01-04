@@ -41,7 +41,7 @@ ENABLE_SPOT_TRADING = False
 ENABLE_FUTURES_TRADING = True
 FUTURE_LEVERAGE = 5 # x5 Leverage
 MIN_TRADE_AMOUNT_CRYPTO = 5 # Binance Min
-ENABLE_COMPOUNDING = False # Set to False to ALWAYS start with Initial Capital (Ignore History PnL)
+ENABLE_COMPOUNDING = True # Set to False to ALWAYS start with Initial Capital (Ignore History PnL)
 
 # --- Stock Configuration (Indian Markets) ---
 # NIFTY500 or selected highly liquid stocks. 
