@@ -35,6 +35,7 @@ CRYPTO_STOP_LOSS = 0.005 # 0.5%
 CRYPTO_TAKE_PROFIT = 0.01 # 1%
 CRYPTO_RISK_PER_TRADE = 0.95 # 95% Risk for micro account (5 USDT) to ensure trade size > minimum
 INITIAL_CAPITAL_CRYPTO = 10 # USD (User Real Balance) - Default
+CRYPTO_TIMEFRAME = '1m' # Default timeframe for scalping
 INITIAL_CAPITAL_CRYPTO_SPOT = 10 # USD
 INITIAL_CAPITAL_CRYPTO_FUTURE = 10 # USD
 ENABLE_SPOT_TRADING = False
