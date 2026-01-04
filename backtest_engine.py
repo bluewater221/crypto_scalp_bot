@@ -129,7 +129,13 @@ async def simulate_trades(df, symbol, asset_type):
             if outcome:
                 active_trade['exit_time'] = current_candle['timestamp']
                 active_trade['outcome'] = outcome
-                active_trade['pnl_pct'] = pnl_pct * 100 # In Percent
+                
+                # Fee simulation: 0.1% for Crypto, 0.05% for Stocks
+                fee_pct = 0.001 if asset_type == 'CRYPTO' else 0.0005
+                
+                # Net PnL calculation including entry and exit fees
+                # PnL = (Gross PnL %) - (2 * fee %)
+                active_trade['pnl_pct'] = (pnl_pct * 100) - (2 * fee_pct * 100)
                 active_trade['exit_price'] = active_trade['sl'] if outcome == 'STOP_LOSS' else active_trade['tp']
                 
                 trades.append(active_trade)
@@ -175,7 +181,7 @@ async def run_backtest():
         total_pnl = df_res['pnl_pct'].sum()
         
         print(f"Win Rate: {win_rate:.2f}%")
-        print(f"Net PnL (Without Fees): {total_pnl:.2f}%")
+        print(f"Net PnL (Including Fees): {total_pnl:.2f}%")
         print(f"Avg PnL per Trade: {df_res['pnl_pct'].mean():.2f}%")
         
         print("\n--- Recent Trades ---")

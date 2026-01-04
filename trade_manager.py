@@ -1,9 +1,9 @@
 import logging
 import json
 import os
+import threading
 from datetime import datetime
 import market_data
-import config
 import config
 import asyncio
 import sheets
@@ -18,19 +18,25 @@ class TradeManager:
         self.initial_capital = initial_capital
         self.leverage = leverage
         self.currency = "₹" if 'STOCK' in market_tag else "$"
+        self._lock = threading.Lock()
         
         self.active_trades = self.load_trades(self.trades_file)
+        logger.info(f"[{self.market_tag}] 📂 Loaded {len(self.active_trades)} ACTIVE trades from {self.trades_file}")
         
         # Try to restore history from Google Sheets (Persistent Storage)
-        # We might need to filter sheet history by market_tag if sharing a sheet
         sheet_history = sheets.fetch_trade_history()
         
         if sheet_history:
-             # Filter only trades relevant to this manager
-             self.history = [t for t in sheet_history if t.get('market') == self.market_tag]
-             logging.info(f"[{self.market_tag}] ✅ Restored {len(self.history)} trades from Sheet.")
+             # Filter only trades relevant to this manager (Case Insensitive)
+             self.history = [t for t in sheet_history if str(t.get('market', '')).upper() == self.market_tag.upper()]
+             logger.info(f"[{self.market_tag}] ✅ Restored {len(self.history)} trades from Sheet (out of {len(sheet_history)} total history).")
         else:
              self.history = self.load_trades(self.history_file)
+             logger.info(f"[{self.market_tag}] 📜 Loaded {len(self.history)} trades from local {self.history_file}")
+
+        # Final Balance Check for Debugging
+        initial_balance = self.calculate_balance()
+        logger.info(f"[{self.market_tag}] 💰 Initial Portfolio Balance: {self.currency}{initial_balance:,.2f}")
 
     def load_trades(self, filename):
         if os.path.exists(filename):
@@ -42,13 +48,14 @@ class TradeManager:
         return []
 
     def save_trades(self):
-        try:
-            with open(self.trades_file, 'w') as f:
-                json.dump(self.active_trades, f, indent=4)
-            with open(self.history_file, 'w') as f:
-                json.dump(self.history, f, indent=4)
-        except Exception as e:
-            logger.error(f"Failed to save {self.trades_file}: {e}")
+        with self._lock:
+            try:
+                with open(self.trades_file, 'w') as f:
+                    json.dump(self.active_trades, f, indent=4)
+                with open(self.history_file, 'w') as f:
+                    json.dump(self.history, f, indent=4)
+            except Exception as e:
+                logger.error(f"Failed to save {self.trades_file}: {e}")
 
     def open_trade(self, signal_data):
         """register a new trade for this specific manager."""
@@ -84,17 +91,28 @@ class TradeManager:
 
         for trade in self.active_trades[:]:
             try:
-                # Fetch current price
-                # Fetch current price
-                if 'CRYPTO' in trade['market']:
-                    # Simplified: Use fetch_ohlcv to get latest close
-                    exchange = market_data.get_crypto_exchange()
-                    ticker = await asyncio.to_thread(exchange.fetch_ticker, trade['symbol'])
-                    curr_price = ticker['last']
-                else:
-                    # Stocks
-                    df = await market_data.fetch_stock_data(trade['symbol'], period='1d', interval='5m')
-                    curr_price = df['close'].iloc[-1]
+                # Fetch current price with retries
+                curr_price = None
+                for attempt in range(3):
+                    try:
+                        if 'CRYPTO' in trade['market']:
+                            exchange = market_data.get_crypto_exchange()
+                            ticker = await asyncio.to_thread(exchange.fetch_ticker, trade['symbol'])
+                            curr_price = ticker['last']
+                        else:
+                            # Stocks
+                            df = await market_data.fetch_stock_data(trade['symbol'], period='1d', interval='5m')
+                            if df is not None and not df.empty:
+                                curr_price = df['close'].iloc[-1]
+                        
+                        if curr_price is not None:
+                            break
+                    except Exception as e:
+                        logger.warning(f"Attempt {attempt+1} failed for {trade['symbol']}: {e}")
+                        await asyncio.sleep(1)
+
+                if curr_price is None:
+                    continue
 
                 # Check Outcomes
                 outcome = None
@@ -179,17 +197,24 @@ class TradeManager:
         sheets.log_closed_trade(trade)
         
         # Send Alert
+        market_display = self.market_tag.replace('_', '\\_')
         emoji = "✅" if outcome == 'WIN' else "❌"
+        ist_now = utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S')
+        balance_before = balance_after - pnl_amt
+        
+        # Calculate localized risk display
+        risk_per_trade_display = f"{risk_per_trade * 100:.1f}%"
+        
         msg = (
             f"{emoji} **TRADE CLOSED: {trade['symbol']}**\n"
             f"Result: {outcome}\n"
-            f"{emoji} **TRADE CLOSED: {trade['symbol']}**\n"
-            f"Result: {outcome}\n"
+            f"📅 **Time**: {ist_now} IST\n"
             f"PnL: {pnl_pct*100:.2f}% ({self.currency}{pnl_amt:,.2f})\n\n"
-            f"💰 **Portfolio Update ({self.market_tag})**\n"
-            f"Initial Capital: {self.currency}{self.initial_capital:,.2f}\n"
-            f"Amount Used: {self.currency}{amount_used_display:,.2f} {'(Margin)' if self.leverage > 1 else ''}\n"
-            f"New Balance: {self.currency}{balance_after:,.2f}\n\n"
+            f"💰 **Portfolio Update ({market_display})**\n"
+            f"Capital Before: {self.currency}{balance_before:,.2f}\n"
+            f"Risk Allowed: {risk_per_trade_display} ({self.currency}{risk_amt:,.2f})\n"
+            f"Position Size: {self.currency}{amount_used_display:,.2f} {'(Margin)' if self.leverage > 1 else ''}\n"
+            f"Remaining Capital: {self.currency}{balance_after:,.2f}\n\n"
             f"Entry: {entry} | Exit: {close_price}"
         )
         
@@ -220,22 +245,30 @@ class TradeManager:
         """Calculates current balance based on initial capital and trade history (Compounding)."""
         balance = self.initial_capital
         
+        if not self.history:
+            return balance
+
         for t in self.history:
             try:
-                # Handle CREDIT entries (Paper Trading top-ups)
+                # Handle CREDIT entries
                 if t.get('side') == 'CREDIT':
-                    balance += t.get('credit_amount', 0)
+                    credit = t.get('credit_amount', 0)
+                    balance += credit
+                    logger.debug(f"[{self.market_tag}] Applied Credit: {self.currency}{credit}, New balance: {self.currency}{balance:,.2f}")
                     continue
                     
                 # Standard Risk Management Calculation
                 risk_per_trade = t.get('risk_pct', 0.005)
                 risk_amt = balance * risk_per_trade
                 
-                entry = t['entry']
-                sl = t['sl']
-                exit_price = t['close_price']
+                entry = t.get('entry', 0)
+                sl = t.get('sl', 0)
+                exit_price = t.get('close_price', 0)
                 
-                # Protect against zero division
+                if entry == 0 or sl == 0 or exit_price == 0:
+                    logger.warning(f"[{self.market_tag}] Skipping trade with zero values: {t.get('symbol')}")
+                    continue
+
                 if entry == sl: continue
 
                 # Quantity
@@ -245,11 +278,9 @@ class TradeManager:
                 raw_position_value = risk_amt / dist_to_sl_pct
                 
                 if self.leverage > 1:
-                    # Leverage Logic
                     max_buying_power = balance * self.leverage
                     actual_position_val = min(raw_position_value, max_buying_power)
                 else:
-                    # Spot Logic
                     actual_position_val = min(raw_position_value, balance)
                 
                 qty = actual_position_val / entry
@@ -261,9 +292,10 @@ class TradeManager:
                     pnl = (entry - exit_price) * qty
                 
                 balance += pnl
+                logger.debug(f"[{self.market_tag}] Trade {t.get('symbol')} closed: {t.get('outcome')}, PnL: {self.currency}{pnl:,.2f}, New balance: {self.currency}{balance:,.2f}")
 
             except Exception as e:
-                logger.error(f"Error calculating balance for trade {t.get('symbol')}: {e}")
+                logger.error(f"[{self.market_tag}] Error calculating balance for trade {t.get('symbol')}: {e}")
                 
         return balance
 

@@ -20,6 +20,7 @@ CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
 
 # Google Sheets
@@ -104,10 +105,10 @@ AIRDROP_CHECK_INTERVAL = 86400 # 24 hours (Was 6 hours)
 
 def check_config():
     print("--- Configuration Check ---")
-    print(f"TELEGRAM_BOT_TOKEN: {'✅ Set' if TELEGRAM_BOT_TOKEN else '❌ Missing'}")
-    print(f"GEMINI_API_KEY: {'✅ Set' if GEMINI_API_KEY else '⚠️ Missing (AI Disabled)'}")
-    print(f"GROQ_API_KEY: {'✅ Set' if GROQ_API_KEY else '⚠️ Missing (AI Disabled)'}")
-    print(f"OPENROUTER_API_KEY: {'✅ Set' if OPENROUTER_API_KEY else '⚠️ Missing (OpenRouter Fallback Disabled)'}")
+    print(f"TELEGRAM_BOT_TOKEN: {'[OK] Set' if TELEGRAM_BOT_TOKEN else '[MISSING] Missing'}")
+    print(f"GEMINI_API_KEY: {'[OK] Set' if GEMINI_API_KEY else '[WARN] Missing (AI Disabled)'}")
+    print(f"GROQ_API_KEY: {'[OK] Set' if GROQ_API_KEY else '[WARN] Missing (AI Disabled)'}")
+    print(f"OPENROUTER_API_KEY: {'[OK] Set' if OPENROUTER_API_KEY else '[WARN] Missing (OpenRouter Fallback Disabled)'}")
     print(f"CRYPTO_PAIRS: {len(CRYPTO_PAIRS)} configured")
     print(f"STOCK_SYMBOLS: {len(STOCK_SYMBOLS)} configured")
     print("---------------------------")

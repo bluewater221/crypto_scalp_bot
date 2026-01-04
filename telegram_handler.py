@@ -7,7 +7,7 @@ import chart_generator
 
 logger = logging.getLogger(__name__)
 
-async def send_signal(bot: Bot, signal_data, market_type):
+async def send_signal(bot: Bot, signal_data, market_type, balance=None):
     """
     Sends signal to the appropriate Telegram channel.
     """
@@ -20,7 +20,6 @@ async def send_signal(bot: Bot, signal_data, market_type):
         return
 
     # Generate Chart
-    # User Request: "put original image" (Restore Chart)
     chart_path = chart_generator.generate_chart(
         signal_data['df'], 
         signal_data['symbol'], 
@@ -29,19 +28,32 @@ async def send_signal(bot: Bot, signal_data, market_type):
     )
     
     # Format Message
-    # Standardized Template (Like Stock)
     emoji = "🚀" if signal_data['side'] == 'LONG' else "📉"
-    
-    # Use higher precision for Crypto to avoid "0.00" issues with cheap coins
     price_fmt = "${:,.6f}" if market_type == 'CRYPTO' else "₹{:,.2f}"
+    currency = "$" if market_type == 'CRYPTO' else "₹"
     
+    # Calculate Recommended Position Size
+    size_str = ""
+    if balance:
+        risk_pct = signal_data.get('risk_pct', 0.01)
+        risk_amt = balance * risk_pct
+        entry = signal_data['entry']
+        sl = signal_data['stop_loss']
+        if entry != sl:
+             dist_to_sl_pct = abs(entry - sl) / entry
+             raw_pos = risk_amt / dist_to_sl_pct
+             # Limit by balance (or leverage if we knew it, but let's keep it simple for now)
+             actual_pos = min(raw_pos, balance) 
+             size_str = f"Rec. Size: **{currency}{actual_pos:,.2f}**\n"
+
     # Unified Template Structure
     message = (
         f"{emoji} **{signal_data['symbol']}** ({signal_data['side']})\n"
         f"Entry: {price_fmt.format(signal_data['entry'])}\n"
         f"SL: {price_fmt.format(signal_data['stop_loss'])}\n"
         f"TP: {price_fmt.format(signal_data['take_profit'])}\n"
-        f"Risk: {signal_data['risk_pct'] * 100}%\n"
+        f"Risk: {signal_data['risk_pct'] * 100:.1f}%\n"
+        f"{size_str}"
         f"Setup: {signal_data['setup']}"
     )
     
@@ -212,8 +224,8 @@ async def send_airdrop(bot: Bot, airdrop_item):
 
     message = (
         f"🪂 *NEW AIRDROP OPPORTUNITY* 🪂\n"
-        f"Potential: {s_emoji} {sentiment_val}\n"
-        f"Value: 💰 **{sentiment.get('estimated_value', 'Unknown')}**\n"
+        f"Sentiment: {s_emoji} {sentiment_val}\n"
+        f"Estimated Reward: 💰 **{sentiment.get('estimated_reward', 'Unknown')}**\n"
         f"Requirements: 📋 **{sentiment.get('requirements', 'None')}**\n\n"
         f"**{airdrop_item['title']}**\n"
     )

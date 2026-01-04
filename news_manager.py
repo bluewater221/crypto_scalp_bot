@@ -33,6 +33,15 @@ class NewsManager:
         self.seen_file = 'seen_news.json'
         self.seen_news_ids = self.load_seen_news()
         
+        # Sync with Google Sheets (Persistence across environments like GitHub Actions)
+        try:
+            remote_ids = sheets.fetch_seen_news()
+            if remote_ids:
+                logger.info(f"🔄 Synced {len(remote_ids)} seen news IDs from Google Sheets")
+                self.seen_news_ids.update(remote_ids)
+        except Exception as e:
+            logger.warning(f"Failed to sync seen news from Sheets: {e}")
+        
 
         # Configure Gemini (New SDK)
         self.client = None
@@ -98,110 +107,107 @@ class NewsManager:
         except Exception as e:
             logger.error(f"Failed to save seen news: {e}")
 
-    def analyze_sentiment(self, text, description=None, check_cost=False):
-        """Analyze title and description sentiment using Gemini AI with TextBlob fallback."""
+    async def analyze_sentiment(self, text, description="", check_cost=False, market_type='CRYPTO'):
+        """Asks AI to analyze news sentiment and impact with localized prompts."""
         result = {
             'sentiment': 'NEUTRAL',
-            'score': 0,
             'ai_insight': None,
-            'low_cost': True, # Default to True (pass) if not checked
-            'requires_premium_x': False, # Default to False (pass)
-            'is_telegram_app': False # Default to False
+            'companies': [],
+            'is_india_macro': False,
+            'low_cost': True,
+            'estimated_reward': 'Unknown',
+            'requirements': 'None'
         }
-        
-        full_text = f"{text}. {description}" if description else text
-        if not full_text: return result
-        
-        # 1. Try Gemini AI (Primary)
-        # Smart Filter: Skip AI for routine news unless necessary (or airdrop usage)
-        should_use_ai = check_cost # Always use AI for Airdrops (verify cost/complexity)
+
+        should_use_ai = self.use_ai
+        # Quota Saver Logic
         if not should_use_ai:
-            matches = [w for w in HIGH_IMPACT_KEYWORDS if w in full_text.lower()]
-            if matches:
+            if any(k in text.lower() for k in ['break', 'surge', 'crash', 'warn', 'launch', 'airdrop']):
                 should_use_ai = True
-                logger.info(f"⚡ Smart Trigger: Using AI for '{matches[0]}'")
             else:
-                logger.debug("Skipping AI for routine news (Quota Saver)")
+                return result
 
-        if self.use_ai and should_use_ai:
+        # Tailor Prompt by Market
+        india_hint = "is_india_macro (boolean: true if about Indian Economy, bonds, RBI, Rupee. False for specific tickers)." if market_type == 'STOCK' else ""
+        
+        # User Feedback: "potential USDT doesn't seem right"
+        # Instruction: DO NOT use the word "Potential" in the result. 
+        # Capture the actual value/reward as mentioned (e.g. '$10', '500 Points', '1 ETH').
+        prompt = (
+            f"Analyze this {market_type} news and return JSON ONLY:\nTitle: {text}\n"
+            f"Keys: sentiment(BULLISH/BEARISH/NEUTRAL), price_prediction(e.g. '+2%'), reasoning(max 10 words), "
+            f"estimated_reward (Expected value/reward. Use symbols like $, ₹ or units like Points/Tokens. DO NOT use 'Potential' and don't force 'USDT' unless explicitly stated), "
+            f"requirements (steps needed), companies(list of tickers), {india_hint}"
+        )
+
+        # 1. Try Groq (Fast & Reliable)
+        if self.groq_client:
             try:
-                cost_prompt = ""
-                if check_cost:
-                    cost_prompt = "low_cost (boolean: true if free or < 5 USDT cost), requires_premium_x (boolean: true if X/Twitter Premium is required), is_telegram_app (boolean: true if it is a Telegram Mini App/Bot game), "
-
-                prompt = (
-                    f"Analyze this financial news:\nTitle: '{text}'\nDescription: '{description}'\n"
-                    f"Return ONLY a JSON object with these keys: "
-                    f"sentiment (BULLISH, BEARISH, or NEUTRAL), "
-                    f"price_prediction (e.g., '+2.5%', '-1.0%', '0%'), "
-                    f"reasoning (concise, max 15 words), "
-                    f"{cost_prompt}"
-                    f"estimated_value (short string estimate of potential value in USDT, e.g. '$10-$50', 'High', 'Unknown'), "
-                    f"requirements (short list of key actions/requirements, e.g. 'Connect Wallet, Follow X, Bridge ETH'), "
-                    f"companies (list of max 2 main company names or tickers mentioned, e.g. ['Reliance', 'TCS']), "
-                    f"is_india_macro (boolean: true if news is about Indian Economy, Bonds, RBI, Rupee, or broad India market. False for specific company news)."
+                chat_completion = self.groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="llama-3.3-70b-versatile",
+                    response_format={"type": "json_object"}
                 )
+                ai_data = json.loads(chat_completion.choices[0].message.content)
+                
+                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
+                result['ai_insight'] = (
+                    f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
+                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
+                )
+                result['companies'] = ai_data.get('companies', [])
+                result['is_india_macro'] = ai_data.get('is_india_macro', False)
+                result['estimated_reward'] = ai_data.get('estimated_reward', 'Unknown')
+                result['requirements'] = ai_data.get('requirements', 'None')
+                return result
+            except Exception as e:
+                logger.warning(f"Groq Sentiment failed: {e}")
+
+        # 2. Try Gemini (Fallback)
+        if self.client:
+            try:
                 response = self.client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
                 ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
                 
                 result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
                 result['ai_insight'] = (
-                    f"🤖 AI (Gemini) Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
-                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
+                    f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
+                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning.')}"
                 )
-                result['companies'] = ai_data.get('companies', [])
-                result['is_india_macro'] = ai_data.get('is_india_macro', False)
-
-                if check_cost:
-                    result['low_cost'] = ai_data.get('low_cost', True)
-                    result['requires_premium_x'] = ai_data.get('requires_premium_x', False)
-                    result['is_telegram_app'] = ai_data.get('is_telegram_app', False)
-                    result['estimated_value'] = ai_data.get('estimated_value', 'Unknown')
-                    result['requirements'] = ai_data.get('requirements', 'None mentioned')
+                result['estimated_reward'] = ai_data.get('estimated_reward', 'Unknown')
                 return result
-
             except Exception as e:
-                logger.warning(f"Gemini Analysis failed (possibly quota): {e}")
-                # Fallthrough to next AI
+                logger.warning(f"Gemini Sentiment failed: {e}")
 
-        # 2. Try Groq AI (Secondary Fallback)
-        if self.groq_client and should_use_ai:
+        # 4. Try Hugging Face (Tertiary Fallback)
+        if self.hf_api_key:
             try:
-                cost_prompt = ""
-                if check_cost:
-                    cost_prompt = "low_cost (boolean), requires_premium_x (boolean), is_telegram_app (boolean), "
-
-                prompt = (
-                    f"Analyze this financial news and return JSON ONLY:\nTitle: {text}\n"
-                    f"Keys: sentiment(BULLISH/BEARISH/NEUTRAL), price_prediction, reasoning, {cost_prompt}"
-                    f"estimated_value, requirements, companies(list), is_india_macro(boolean)."
-                )
+                # Using meta-llama/Meta-Llama-3-8B-Instruct
+                hf_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
+                headers = {"Authorization": f"Bearer {self.hf_api_key}"}
+                payload = {
+                    "inputs": prompt + "\nReturn ONLY valid JSON.",
+                    "parameters": {"max_new_tokens": 512, "return_full_text": False}
+                }
                 
-                chat_completion = self.groq_client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile", # High quality free tier model
-                    response_format={"type": "json_object"}
-                )
-                
-                ai_data = json.loads(chat_completion.choices[0].message.content)
-                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
-                result['ai_insight'] = (
-                    f"🤖 AI (Groq) Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
-                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning provided.')}"
-                )
-                result['companies'] = ai_data.get('companies', [])
-                result['is_india_macro'] = ai_data.get('is_india_macro', False)
-                
-                if check_cost:
-                    result['low_cost'] = ai_data.get('low_cost', True)
-                    result['requires_premium_x'] = ai_data.get('requires_premium_x', False)
-                    result['is_telegram_app'] = ai_data.get('is_telegram_app', False)
-                    result['estimated_value'] = ai_data.get('estimated_value', 'Unknown')
-                    result['requirements'] = ai_data.get('requirements', 'None')
-                return result
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(hf_url, headers=headers, json=payload, timeout=20) as response:
+                        if response.status == 200:
+                            hf_data = await response.json()
+                            content = hf_data[0]['generated_text']
+                            # Extract JSON
+                            start_idx = content.find('{')
+                            end_idx = content.rfind('}') + 1
+                            if start_idx != -1 and end_idx != -1:
+                                ai_data = json.loads(content[start_idx:end_idx])
+                                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
+                                result['ai_insight'] = f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}"
+                                result['estimated_reward'] = ai_data.get('estimated_reward', 'Unknown')
+                                return result
             except Exception as e:
-                logger.warning(f"Groq Analysis failed: {e}")
-                # Fallthrough to next AI
+                logger.warning(f"Hugging Face Sentiment failed: {e}")
+
+        return result
 
          # 3. Try OpenRouter (DeepSeek/Qwen Fallback)
         if self.openrouter_client and should_use_ai:
@@ -310,6 +316,7 @@ class NewsManager:
                         news_items.append(news_item)
                         try:
                             self.save_seen_news()
+                            sheets.log_seen_news(news_id)
                         except: pass
         except Exception as e:
             logger.error(f"Error fetching Economic Times news: {e}")
@@ -374,6 +381,7 @@ class NewsManager:
                             })
                             try:
                                 self.save_seen_news()
+                                sheets.log_seen_news(news_id)
                             except: pass
         except Exception as e:
             logger.error(f"Error fetching crypto news: {e}")
@@ -422,10 +430,11 @@ class NewsManager:
                             'publisher': 'CoinTelegraph Experts',
                             'type': 'CHART',
                             'image_url': image_url,
-                            'sentiment': self.analyze_sentiment(entry.title, summary)
+                            'sentiment': analysis_result
                         })
                         try:
                             self.save_seen_news()
+                            sheets.log_seen_news(news_id)
                         except: pass
         except Exception as e:
             logger.error(f"Error fetching expert analysis: {e}")
@@ -461,7 +470,7 @@ class NewsManager:
 
 
                         # Analyze Sentiment & Check Cost
-                        analysis_result = self.analyze_sentiment(entry.title, summary, check_cost=True)
+                        analysis_result = await self.analyze_sentiment(entry.title, summary, check_cost=True, market_type='CRYPTO')
                         
                         # Filter out expensive airdrops (> 5 USDT) AND Premium X
                         if not analysis_result.get('low_cost', True):
@@ -488,6 +497,7 @@ class NewsManager:
                         })
                         try:
                             self.save_seen_news()
+                            sheets.log_seen_news(news_id)
                         except: pass
         except Exception as e:
             logger.error(f"Error fetching airdrops: {e}")

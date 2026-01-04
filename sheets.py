@@ -36,6 +36,19 @@ def get_gspread_client():
         logger.error(f"Google Sheets Auth Error: {e}")
         return None
 
+def open_spreadsheet(client, name):
+    """Opens a spreadsheet by name, with fallback for stripped titles."""
+    try:
+        return client.open(name)
+    except gspread.exceptions.SpreadsheetNotFound:
+        # Try finding a sheet that matches after stripping spaces
+        all_sheets = client.openall()
+        for s in all_sheets:
+            if s.title.strip() == name.strip():
+                logger.info(f"Found match with stripped name: '{s.title}'")
+                return client.open_by_key(s.id)
+        raise
+
 def log_signal(signal_data):
     """Logs the signal to the sheet."""
     client = get_gspread_client()
@@ -43,7 +56,13 @@ def log_signal(signal_data):
         return
 
     try:
-        sheet = client.open(config.GOOGLE_SHEET_NAME).sheet1
+        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
+        # Try to find 'Signals' sheet, or use sheet1
+        try:
+            sheet = sh.worksheet("Signals")
+        except:
+            sheet = sh.sheet1
+            
         # Format: Symbol, Date, Side, Entry, SL, TP, Setup
         row = [
             signal_data['symbol'],
@@ -66,7 +85,7 @@ def log_closed_trade(trade_data):
 
     try:
         # Open or Create 'History' worksheet
-        sh = client.open(config.GOOGLE_SHEET_NAME)
+        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
         try:
             sheet = sh.worksheet("History")
         except:
@@ -100,35 +119,93 @@ def fetch_trade_history():
     if not client: return []
 
     try:
-        sh = client.open(config.GOOGLE_SHEET_NAME)
+        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
         try:
             sheet = sh.worksheet("History")
         except:
             return [] # No history yet
 
         records = sheet.get_all_records()
-        # Convert PnL/Numbers back to proper types if needed
-        # gspread get_all_records returns a list of dicts
+        
+        def safe_float(val):
+            """Cleans and converts sheet value to float, handling % signs."""
+            if isinstance(val, (int, float)): return float(val)
+            if not val: return 0.0
+            try:
+                s_val = str(val).strip()
+                is_pct = '%' in s_val
+                # Remove symbols and commas
+                clean_val = s_val.replace('%', '').replace('$', '').replace('₹', '').replace(',', '').strip()
+                num = float(clean_val)
+                return num / 100.0 if is_pct else num
+            except:
+                return 0.0
+
         cleaned_records = []
         for r in records:
-            # Ensure PnL is float
             try:
-                r['pnl_pct'] = float(r['Pct']) if 'Pct' in r else (float(r['PnL%']) if 'PnL%' in r else 0.0)
-                r['entry'] = float(r['Entry'])
-                r['sl'] = float(r['SL'])
-                r['close_price'] = float(r['Close Price'])
-                r['risk_pct'] = float(r['Risk%']) if 'Risk%' in r else 0.005
+                # Identify PnL key (Sheets might have PnL% or Pct)
+                pnl_key = next((k for k in ['PnL%', 'Pct', 'pnl_pct'] if k in r), None)
+                r['pnl_pct'] = safe_float(r[pnl_key]) if pnl_key else 0.0
+                
+                # Standard numeric fields
+                r['entry'] = safe_float(r.get('Entry', r.get('entry', 0)))
+                r['sl'] = safe_float(r.get('SL', r.get('sl', 0)))
+                r['close_price'] = safe_float(r.get('Close Price', r.get('close_price', 0)))
+                r['risk_pct'] = safe_float(r.get('Risk%', r.get('risk_pct', 0.005)))
                 
                 # Normalize keys to match trade_manager expectation (lowercase)
-                r['market'] = r['Market']
-                r['side'] = r['Side']
-                r['outcome'] = r['Outcome']
-                r['symbol'] = r['Symbol']
-            except:
-                pass
-            cleaned_records.append(r)
+                r['market'] = r.get('Market', r.get('market', 'UNKNOWN'))
+                r['side'] = r.get('Side', r.get('side', 'LONG'))
+                r['outcome'] = r.get('Outcome', r.get('outcome', 'LOSS'))
+                r['symbol'] = r.get('Symbol', r.get('symbol', 'UNKNOWN'))
+                
+                cleaned_records.append(r)
+            except Exception as e:
+                logger.warning(f"Skipping malformed trade record: {e}")
+                continue
             
         return cleaned_records
     except Exception as e:
         logger.error(f"Failed to fetch trade history: {e}")
         return []
+
+def fetch_seen_news():
+    """Fetches all seen news/airdrop IDs from 'Seen_News' sheet."""
+    client = get_gspread_client()
+    if not client: return set()
+
+    try:
+        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
+        try:
+            sheet = sh.worksheet("Seen_News")
+        except:
+            return set()
+
+        # Get all IDs from the first column
+        ids = sheet.col_values(1)
+        # Skip header if present
+        if ids and ids[0] == "NewsID":
+            ids = ids[1:]
+        return set(ids)
+    except Exception as e:
+        logger.error(f"Failed to fetch seen news: {e}")
+        return set()
+
+def log_seen_news(news_id):
+    """Logs a seen news ID to the 'Seen_News' sheet."""
+    client = get_gspread_client()
+    if not client: return
+
+    try:
+        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
+        try:
+            sheet = sh.worksheet("Seen_News")
+        except:
+            sheet = sh.add_worksheet(title="Seen_News", rows="5000", cols="2")
+            sheet.append_row(["NewsID", "LoggedAt"])
+        
+        from datetime import datetime
+        sheet.append_row([str(news_id), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+    except Exception as e:
+        logger.error(f"Failed to log seen news: {e}")

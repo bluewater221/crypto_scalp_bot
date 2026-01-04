@@ -57,25 +57,7 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
         f"- verdict (APPROVED or REJECTED)"
     )
 
-    # 1. Try Gemini
-    if gemini:
-        try:
-            response = await asyncio.to_thread(
-                gemini.models.generate_content,
-                model='gemini-2.0-flash',
-                contents=prompt
-            )
-            raw_text = response.text.replace('```json', '').replace('```', '').strip()
-            data = json.loads(raw_text)
-            return {
-                'confidence': f"{data.get('confidence', 0)}% (G)",
-                'reasoning': data.get('reasoning', 'No reasoning'),
-                'verdict': data.get('verdict', 'APPROVED')
-            }
-        except Exception as e:
-            logger.warning(f"Gemini validation failed: {e}")
-
-    # 2. Try Groq Fallback
+    # 1. Try Groq (Primary Fallback for better reliability/higher limits)
     if groq:
         try:
             chat_completion = await asyncio.to_thread(
@@ -92,6 +74,24 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
             }
         except Exception as e:
             logger.warning(f"Groq validation failed: {e}")
+
+    # 2. Try Gemini
+    if gemini:
+        try:
+            response = await asyncio.to_thread(
+                gemini.models.generate_content,
+                model='gemini-2.0-flash',
+                contents=prompt
+            )
+            raw_text = response.text.replace('```json', '').replace('```', '').strip()
+            data = json.loads(raw_text)
+            return {
+                'confidence': f"{data.get('confidence', 0)}% (G)",
+                'reasoning': data.get('reasoning', 'No reasoning'),
+                'verdict': data.get('verdict', 'APPROVED')
+            }
+        except Exception as e:
+            logger.warning(f"Gemini validation failed: {e}")
 
     # Fallback after both fail
     return {'confidence': 'Error', 'reasoning': 'AI Unresponsive', 'verdict': 'APPROVED'}

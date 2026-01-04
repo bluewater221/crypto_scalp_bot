@@ -362,7 +362,9 @@ async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
         try:
             signal = await signals.analyze_crypto(exchange, symbol)
             if signal:
-                await telegram_handler.send_signal(context.bot, signal, 'CRYPTO')
+                # Get current balance for recommendation logic
+                current_bal = spot_mgr.calculate_balance()
+                await telegram_handler.send_signal(context.bot, signal, 'CRYPTO', balance=current_bal)
                 
                 # Routing Logic
                 if signal['side'] == 'LONG':
@@ -396,7 +398,9 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
         try:
             signal = await signals.analyze_stock(symbol)
             if signal:
-                await telegram_handler.send_signal(context.bot, signal, 'STOCK')
+                # Get current balance for recommendation logic
+                current_bal = stock_mgr.calculate_balance()
+                await telegram_handler.send_signal(context.bot, signal, 'STOCK', balance=current_bal)
                 stock_mgr.open_trade(signal)
             success_count += 1
         except Exception as e:

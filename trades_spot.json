@@ -1,0 +1,14 @@
+[
+    {
+        "id": "BTC/USDT_CRYPTO_SPOT_1767418627",
+        "symbol": "BTC/USDT",
+        "market": "CRYPTO_SPOT",
+        "side": "LONG",
+        "entry": 50000,
+        "tp": 55000,
+        "sl": 45000,
+        "status": "OPEN",
+        "open_time": "2025-01-01",
+        "risk_pct": 0.95
+    }
+]
