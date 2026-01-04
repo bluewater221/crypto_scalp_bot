@@ -140,7 +140,26 @@ class NewsManager:
             f"requirements (steps needed), companies(list of tickers), {india_hint}"
         )
 
-        # 1. Try Groq (Fast & Reliable)
+        # 1. Try Gemini (Primary)
+        if self.client:
+            try:
+                response = self.client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+                ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
+                
+                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
+                result['ai_insight'] = (
+                    f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
+                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning.')}"
+                )
+                result['companies'] = ai_data.get('companies', [])
+                result['is_india_macro'] = ai_data.get('is_india_macro', False)
+                result['estimated_reward'] = ai_data.get('estimated_reward', 'Unknown')
+                result['requirements'] = ai_data.get('requirements', 'None')
+                return result
+            except Exception as e:
+                logger.warning(f"Gemini Sentiment failed: {e}")
+
+        # 2. Try Groq (Fallback)
         if self.groq_client:
             try:
                 chat_completion = self.groq_client.chat.completions.create(
@@ -162,22 +181,6 @@ class NewsManager:
                 return result
             except Exception as e:
                 logger.warning(f"Groq Sentiment failed: {e}")
-
-        # 2. Try Gemini (Fallback)
-        if self.client:
-            try:
-                response = self.client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-                ai_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
-                
-                result['sentiment'] = ai_data.get('sentiment', 'NEUTRAL')
-                result['ai_insight'] = (
-                    f"🤖 AI Prediction: {ai_data.get('price_prediction', 'N/A')}\n"
-                    f"💡 Reasoning: {ai_data.get('reasoning', 'No reasoning.')}"
-                )
-                result['estimated_reward'] = ai_data.get('estimated_reward', 'Unknown')
-                return result
-            except Exception as e:
-                logger.warning(f"Gemini Sentiment failed: {e}")
 
         # 4. Try Hugging Face (Tertiary Fallback)
         if self.hf_api_key:
@@ -446,12 +449,22 @@ class NewsManager:
         airdrops = []
         url = "https://airdropalert.com/feed/rssfeed"
         
+        # Re-sync seen IDs from Sheets to catch updates from other environments (GitHub Actions, etc.)
+        try:
+            remote_ids = sheets.fetch_seen_news()
+            if remote_ids:
+                self.seen_news_ids.update(remote_ids)
+                logger.debug(f"🔄 Re-synced {len(remote_ids)} seen IDs before airdrop check")
+        except Exception as e:
+            logger.warning(f"Failed to re-sync seen news: {e}")
+        
         try:
             logger.info("Checking for new airdrops...")
             feed = await asyncio.to_thread(feedparser.parse, url)
             
             for entry in feed.entries[:3]:
-                news_id = entry.get('id', entry.link)
+                # Use entry.link as primary ID (more reliable than entry.id)
+                news_id = entry.link
                 
                 if news_id not in self.seen_news_ids:
                     # Parse date
