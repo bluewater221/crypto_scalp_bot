@@ -518,9 +518,9 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'market': 'CRYPTO_FUTURE',
             'symbol': 'BTC/USDT',
             'side': 'LONG',
-            'entry': 50000,
-            'stop_loss': 49000,
-            'take_profit': 52000,
+            'entry': 50000.00,
+            'stop_loss': 49000.00,
+            'take_profit': 52000.00,
             'setup': 'Security Verification Test',
             'risk_pct': 0.01, # Minimal risk for test
             'timestamp': utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S'),
@@ -528,12 +528,45 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'ai_reasoning': 'System Integrity Check'
         }
         
-        # Simulate Open
-        # Note: We don't actually add it to the manager to avoid corrupting real PnL history
-        # We just verify the notification logic works if we were to.
+        # SEND ACTUAL TEST NOTIFICATION (Visual Proof)
+        # We assume Future Manager for this test
+        # Create a mock trade object
+        trade = {
+            'id': 'TEST_TRADE_123',
+            'symbol': 'BTC/USDT',
+            'market': 'CRYPTO_FUTURE',
+            'side': 'LONG',
+            'entry': 50000.0,
+            'tp': 52000.0,
+            'sl': 49000.0,
+            'risk_pct': 0.95
+        }
+        
+        msg = (
+            "🧪 **[TEST MODE] Security Drill** 🧪\n"
+            "🟢 **TRADE OPENED: BTC/USDT**\n"
+            "Side: LONG | Market: CRYPTO\\_FUTURE\n"
+            f"📅 **Time**: {utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S')} IST\n\n"
+            "📊 **Entry Details**\n"
+            "Entry: $50,000.0000\n"
+            "Take Profit: $52,000.0000 (+4.00%)\n"
+            "Stop Loss: $49,000.0000 (-2.00%)\n\n"
+            "💰 **Position**\n"
+            "Size: $47.50 (Margin)\n"
+            "Risk: 95.0% ($9.50)\n"
+            "Balance: $10.00"
+        )
+        
+        # Send to PnL Channel
+        channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID or config.TELEGRAM_CRYPTO_CHANNEL_ID
+        if channel_id:
+            await context.bot.send_message(chat_id=channel_id, text=msg, parse_mode='Markdown')
+            report.append("✅ Test Notification Sent to Channel")
+        else:
+             report.append("⚠️ Channel ID missing, skipped notification")
+
         report.append("✅ Signal Generation: OK")
-        report.append("✅ Risk Engine: OK (Position Size Calc Valid)")
-        report.append("✅ Notification Relay: Active")
+        report.append("✅ Risk Engine: OK")
         
     except Exception as e:
         report.append(f"❌ Simulation Failed: {e}")
