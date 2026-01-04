@@ -155,6 +155,9 @@ class NewsManager:
                 result['is_india_macro'] = ai_data.get('is_india_macro', False)
                 result['estimated_reward'] = ai_data.get('estimated_reward', 'Unknown')
                 result['requirements'] = ai_data.get('requirements', 'None')
+                
+                # Rate limit protection: Wait 12 seconds to respect 5 RPM limit
+                await asyncio.sleep(12)
                 return result
             except Exception as e:
                 logger.warning(f"Gemini Sentiment failed: {e}")
