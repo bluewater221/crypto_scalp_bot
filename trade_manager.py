@@ -7,6 +7,7 @@ import market_data
 import config
 import asyncio
 import sheets
+import utils
 
 logger = logging.getLogger(__name__)
 
