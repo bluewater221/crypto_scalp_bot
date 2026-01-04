@@ -1,7 +1,7 @@
 python-telegram-bot[job-queue]>=21.4
 ccxt>=4.0.0
 yfinance>=0.2.40
-mplfinance
+# mplfinance
 pandas>=2.2.0
 gspread>=6.0.0
 oauth2client

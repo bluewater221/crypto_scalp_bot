@@ -78,3 +78,21 @@ ADX_MAX = 50 # Avoid extreme trends (reversal risk)
 # RSI Filter for Stocks
 RSI_MIN = 45 # Momentum start
 RSI_MAX = 65 # Momentum continuation (avoid Overbought > 70 for entry)
+
+# --- Time & Schedule ---
+TIMEZONE_STR = 'Asia/Kolkata'
+
+# Market Hours (IST)
+CRYPTO_MARKET_OPEN = 0
+CRYPTO_MARKET_CLOSE = 24
+
+STOCK_MARKET_OPEN_HOUR = 9
+STOCK_MARKET_OPEN_MINUTE = 15
+STOCK_MARKET_CLOSE_HOUR = 15
+STOCK_MARKET_CLOSE_MINUTE = 30
+
+
+STOCK_TIMEFRAME = '5m'
+KITE_API_KEY = os.getenv('KITE_API_KEY')
+KITE_ACCESS_TOKEN = os.getenv('KITE_ACCESS_TOKEN')
+

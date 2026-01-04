@@ -16,6 +16,7 @@ except ImportError:
     Groq = None
 from openai import OpenAI
 import market_data
+import sheets
 
 logger = logging.getLogger(__name__)
 

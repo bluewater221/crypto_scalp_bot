@@ -65,8 +65,12 @@ def home():
     return "<h1>🚀 Scalp Bot is Running!</h1><p>Status: Active 🟢</p><p>Check Telegram for updates.</p>", 200
 
 def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    app_flask.run(host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get("PORT", 5000))
+        logger.info(f"Starting Flask Health Check on port {port}...")
+        app_flask.run(host='0.0.0.0', port=port, use_reloader=False)
+    except Exception as e:
+        logger.critical(f"Flask failed to start: {e}")
 
 # --- Command Handlers ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

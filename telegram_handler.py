@@ -3,7 +3,7 @@ import os
 import asyncio
 from telegram import Bot, InputFile
 import config
-import chart_generator
+# import chart_generator
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +20,14 @@ async def send_signal(bot: Bot, signal_data, market_type, balance=None):
         return
 
     # Generate Chart
-    chart_path = chart_generator.generate_chart(
-        signal_data['df'], 
-        signal_data['symbol'], 
-        config.CRYPTO_TIMEFRAME if market_type == 'CRYPTO' else config.STOCK_TIMEFRAME,
-        signal_data['side']
-    )
+    # Chart generation disabled to save memory (512MB limit)
+    chart_path = None
+    # chart_path = chart_generator.generate_chart(
+    #     signal_data['df'], 
+    #     signal_data['symbol'], 
+    #     config.CRYPTO_TIMEFRAME if market_type == 'CRYPTO' else config.STOCK_TIMEFRAME,
+    #     signal_data['side']
+    # )
     
     # Format Message
     emoji = "🚀" if signal_data['side'] == 'LONG' else "📉"
