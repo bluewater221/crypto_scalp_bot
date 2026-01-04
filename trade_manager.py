@@ -301,6 +301,11 @@ class TradeManager:
         """Calculates current balance based on initial capital and trade history (Compounding)."""
         balance = self.initial_capital
         
+        # New Feature: Disable Compounding/Persistent Balance if requested
+        # This fixes the issue of huge balances from old/restored history
+        if not getattr(config, 'ENABLE_COMPOUNDING', True):
+             return balance
+
         if not self.history:
             return balance
 
