@@ -465,39 +465,50 @@ def main():
     try:
         logger.info("Starting Unified Scalp Bot...")
 
-    # Check Critical Env Vars
-    if not config.TELEGRAM_BOT_TOKEN:
-        logger.critical("❌ FATAL: TELEGRAM_BOT_TOKEN is missing! Check your environment variables.")
-        return
+        # Check Critical Env Vars
+        if not config.TELEGRAM_BOT_TOKEN:
+            logger.critical("❌ FATAL: TELEGRAM_BOT_TOKEN is missing! Check your environment variables.")
+            return
 
-    # 1. Start Flask (Background Thread)
-    port = int(os.environ.get("PORT", 5000))
-    logger.info(f"Starting Flask on port {port}...")
-    t_flask = threading.Thread(target=run_flask)
-    t_flask.daemon = True
-    t_flask.start()
-    
-    logger.info("Flask thread started. Initializing Telegram App...")
+        # 1. Start Flask (Background Thread)
+        port = int(os.environ.get("PORT", 5000))
+        logger.info(f"Starting Flask on port {port}...")
+        t_flask = threading.Thread(target=run_flask)
+        t_flask.daemon = True
+        t_flask.start()
+        
+        logger.info("Flask thread started. Initializing Telegram App...")
 
-    # 2. Initialize Telegram Bot
-    try:
-        application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
-        logger.info("Telegram App built successfully.")
+        # 2. Initialize Telegram Bot
+        try:
+            application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+            logger.info("Telegram App built successfully.")
+        except Exception as e:
+            logger.critical(f"Failed to build Telegram App: {e}")
+            raise e
+        
+        # Add Command Handlers
+        application.add_handler(CommandHandler("test", test_command))
+        application.add_handler(CommandHandler("stats", stats_command))
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("id", id_command))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("price", price_command))
+        application.add_handler(CommandHandler("news", news_command))
+        application.add_handler(CommandHandler("airdrops", airdrops_command))
+        application.add_handler(CommandHandler("market", market_command))
+        application.add_handler(CommandHandler("verify", verify_command)) # Security & Health Check
+
+    # 4. Run Telegram Polling
+        logger.info("Bot is running... Starting Polling.")
+        application.run_polling()
+        
     except Exception as e:
-        logger.critical(f"Failed to build Telegram App: {e}")
+        logger.critical(f"🔥 FATAL CRASH IN MAIN: {e}", exc_info=True)
+        # Keep process alive for logs if needed, or exit
+        import time
+        time.sleep(10)
         raise e
-    
-    # Add Command Handlers
-    application.add_handler(CommandHandler("test", test_command))
-    application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("id", id_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("price", price_command))
-    application.add_handler(CommandHandler("news", news_command))
-    application.add_handler(CommandHandler("airdrops", airdrops_command))
-    application.add_handler(CommandHandler("market", market_command))
-    application.add_handler(CommandHandler("verify", verify_command)) # Security & Health Check
 
 async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """(Security Expert Mode) verifying system integrity and trade pipeline."""
@@ -587,38 +598,3 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     final_msg = "\n".join(report)
     await update.message.reply_text(final_msg, parse_mode='Markdown')
-
-
-    # 3. separate jobs
-    job_queue = application.job_queue
-    if job_queue:
-        logger.info("Starting Scheduler via JobQueue...")
-        
-        # Crypto Scan
-        job_queue.run_repeating(scan_crypto, interval=config.CRYPTO_SCAN_INTERVAL, first=10)
-        
-        # Stock Scan
-        job_queue.run_repeating(scan_stocks, interval=config.STOCK_SCAN_INTERVAL, first=15)
-        
-        # News & Airdrops -> Moved to GitHub Actions (run_content_job.py)
-        # job_queue.run_repeating(news_job, interval=config.NEWS_CHECK_INTERVAL, first=30)
-        # job_queue.run_repeating(airdrop_job, interval=config.AIRDROP_CHECK_INTERVAL, first=60)
-        
-        # Trade Manager (New) - Check every 5 minutes
-        job_queue.run_repeating(check_trades, interval=300, first=40)
-    else:
-        logger.error("❌ JobQueue is not available! Make sure 'python-telegram-bot[job-queue]' is installed.")
-
-    # 4. Run Telegram Polling
-        logger.info("Bot is running... Starting Polling.")
-        application.run_polling()
-        
-    except Exception as e:
-        logger.critical(f"🔥 FATAL CRASH IN MAIN: {e}", exc_info=True)
-        # Keep process alive for logs if needed, or exit
-        import time
-        time.sleep(10)
-        raise e
-
-if __name__ == '__main__':
-    main()
