@@ -369,12 +369,12 @@ async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
                 # Routing Logic
                 if signal['side'] == 'LONG':
                     if config.ENABLE_SPOT_TRADING:
-                        spot_mgr.open_trade(signal)
+                        await spot_mgr.open_trade(signal, context.bot)
                     if config.ENABLE_FUTURES_TRADING:
-                        future_mgr.open_trade(signal)
+                        await future_mgr.open_trade(signal, context.bot)
                 elif signal['side'] == 'SHORT':
                     if config.ENABLE_FUTURES_TRADING:
-                        future_mgr.open_trade(signal)
+                        await future_mgr.open_trade(signal, context.bot)
                         
         except Exception as e:
             logger.error(f"Error scanning {symbol}: {e}")
@@ -401,7 +401,7 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
                 # Get current balance for recommendation logic
                 current_bal = stock_mgr.calculate_balance()
                 await telegram_handler.send_signal(context.bot, signal, 'STOCK', balance=current_bal)
-                stock_mgr.open_trade(signal)
+                await stock_mgr.open_trade(signal, context.bot)
             success_count += 1
         except Exception as e:
             fail_count += 1

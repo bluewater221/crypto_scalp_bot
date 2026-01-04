@@ -57,7 +57,7 @@ class TradeManager:
             except Exception as e:
                 logger.error(f"Failed to save {self.trades_file}: {e}")
 
-    def open_trade(self, signal_data):
+    async def open_trade(self, signal_data, bot=None):
         """register a new trade for this specific manager."""
         # Risk Pct
         if 'STOCK' in self.market_tag:
@@ -83,6 +83,61 @@ class TradeManager:
         self.active_trades.append(trade)
         self.save_trades()
         logger.info(f"Opened Trade: {trade['id']} ({self.market_tag})")
+        
+        # Send notification to PnL channel
+        if bot:
+            balance = self.calculate_balance()
+            risk_amt = balance * risk_pct
+            entry = trade['entry']
+            sl = trade['sl']
+            tp = trade['tp']
+            
+            # Position sizing
+            if entry != sl:
+                dist_to_sl_pct = abs(entry - sl) / entry
+                raw_position_value = risk_amt / dist_to_sl_pct
+                
+                if self.leverage > 1:
+                    max_buying_power = balance * self.leverage
+                    actual_position_val = min(raw_position_value, max_buying_power)
+                    margin_used = actual_position_val / self.leverage
+                    position_display = f"{self.currency}{margin_used:,.2f} (Margin)"
+                else:
+                    actual_position_val = min(raw_position_value, balance)
+                    position_display = f"{self.currency}{actual_position_val:,.2f}"
+            else:
+                position_display = "N/A"
+            
+            market_display = self.market_tag.replace('_', '\\_')
+            side_emoji = "🟢" if trade['side'] == 'LONG' else "🔴"
+            ist_now = utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S')
+            
+            msg = (
+                f"{side_emoji} **TRADE OPENED: {trade['symbol']}**\n"
+                f"Side: {trade['side']} | Market: {market_display}\n"
+                f"📅 **Time**: {ist_now} IST\n\n"
+                f"📊 **Entry Details**\n"
+                f"Entry: {self.currency}{entry:,.4f}\n"
+                f"Take Profit: {self.currency}{tp:,.4f} (+{((tp-entry)/entry)*100:.2f}%)\n"
+                f"Stop Loss: {self.currency}{sl:,.4f} ({((sl-entry)/entry)*100:.2f}%)\n\n"
+                f"💰 **Position**\n"
+                f"Size: {position_display}\n"
+                f"Risk: {risk_pct*100:.1f}% ({self.currency}{risk_amt:,.2f})\n"
+                f"Balance: {self.currency}{balance:,.2f}"
+            )
+            
+            # Route to PnL Channel
+            channel_id = None
+            if 'CRYPTO' in trade['market']:
+                channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID
+            elif trade['market'] == 'STOCK':
+                channel_id = config.TELEGRAM_STOCK_PNL_CHANNEL_ID
+            
+            if channel_id:
+                try:
+                    await bot.send_message(chat_id=channel_id, text=msg, parse_mode='Markdown')
+                except Exception as e:
+                    logger.error(f"Failed to send trade open notification: {e}")
 
     async def update_trades(self, bot):
         """Checks live price for all active trades."""
