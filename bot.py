@@ -462,7 +462,8 @@ async def check_airdrops(context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Main Entry Point."""
-    logger.info("Starting Unified Scalp Bot...")
+    try:
+        logger.info("Starting Unified Scalp Bot...")
 
     # Check Critical Env Vars
     if not config.TELEGRAM_BOT_TOKEN:
@@ -470,12 +471,21 @@ def main():
         return
 
     # 1. Start Flask (Background Thread)
+    port = int(os.environ.get("PORT", 5000))
+    logger.info(f"Starting Flask on port {port}...")
     t_flask = threading.Thread(target=run_flask)
     t_flask.daemon = True
     t_flask.start()
     
+    logger.info("Flask thread started. Initializing Telegram App...")
+
     # 2. Initialize Telegram Bot
-    application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    try:
+        application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        logger.info("Telegram App built successfully.")
+    except Exception as e:
+        logger.critical(f"Failed to build Telegram App: {e}")
+        raise e
     
     # Add Command Handlers
     application.add_handler(CommandHandler("test", test_command))
@@ -600,8 +610,15 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error("❌ JobQueue is not available! Make sure 'python-telegram-bot[job-queue]' is installed.")
 
     # 4. Run Telegram Polling
-    logger.info("Bot is running...")
-    application.run_polling()
+        logger.info("Bot is running... Starting Polling.")
+        application.run_polling()
+        
+    except Exception as e:
+        logger.critical(f"🔥 FATAL CRASH IN MAIN: {e}", exc_info=True)
+        # Keep process alive for logs if needed, or exit
+        import time
+        time.sleep(10)
+        raise e
 
 if __name__ == '__main__':
     main()
