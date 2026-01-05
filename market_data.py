@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 # --- Exchange Setup ---
 def get_crypto_exchange():
-    """Initialize the Kraken exchange (public data, no API key needed)."""
+    """Initialize the Binance exchange (Singapore server allows this)."""
     try:
-        # Using Kraken - more cloud-friendly than Bybit/Binance
-        exchange = ccxt.kraken({
+        # Using Binance - Best liquidity, works in Singapore
+        exchange = ccxt.binance({
             'enableRateLimit': True,
         })
         return exchange

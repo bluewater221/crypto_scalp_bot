@@ -132,28 +132,74 @@ async def check_google_sheets():
         # print(traceback.format_exc()) # Uncomment for full debug
         return False
 
+async def check_openrouter():
+    print(f"\n{BOLD}--- OpenRouter Check ---{RESET}")
+    if not config.OPENROUTER_API_KEY:
+        print(f"{YELLOW}[WARN] OPENROUTER_API_KEY not found. (Skipping){RESET}")
+        return False
+    try:
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=config.OPENROUTER_API_KEY,
+        )
+        # Simple model list check
+        await asyncio.to_thread(client.models.list)
+        print(f"{GREEN}[OK] OpenRouter API is working.{RESET}")
+        return True
+    except Exception as e:
+        print(f"{RED}[FAIL] OpenRouter Error: {e}{RESET}")
+        return False
+
 async def main():
-    print(f"\n{BOLD}🚀 Starting API Health Check for Crypto Bot...{RESET}\n")
+    output_lines = []
+    def log(msg):
+        print(msg)
+        # Strip colors for file
+        clean_msg = msg.replace(BOLD, "").replace(RESET, "").replace(GREEN, "").replace(RED, "").replace(YELLOW, "")
+        output_lines.append(clean_msg)
+
+    log(f"\n{BOLD}Starting API Health Check for Crypto Bot...{RESET}\n")
     
-    # Run checks sequentially for clearer logs
+    # Run checks sequentially
+    # We need to capture the print outputs of other functions too? 
+    # For now, just relying on return values for the summary, 
+    # and we will see the failure details in the console output (captured below) or we just infer.
+    # Actually, we can't easily capture the prints from other functions without refactoring.
+    # Let's just run them and assume we can read the console IF we don't redirect.
+    # But wait, I want to read the result.
+    
+    # Quick fix: Just run them. I will use 'command_status' to read the output again, 
+    # but I will ensure I capture enough characters.
+    
     results = [
         await check_telegram(),
         await check_gemini(),
         await check_groq(),
+        await check_openrouter(),
         await check_google_sheets()
     ]
     
-    print(f"\n{BOLD}--- Execution Summary ---{RESET}")
+    log(f"\n{BOLD}--- Execution Summary ---{RESET}")
     passed = sum(1 for r in results if r)
     total = len(results)
-    print(f"Total Checks: {total}")
-    print(f"Passed: {passed}")
-    print(f"Failed/Skipped: {total - passed}")
+    log(f"Total Checks: {total}")
+    log(f"Passed: {passed}")
+    log(f"Failed/Skipped: {total - passed}")
     
+    # Explicitly write which ones failed based on index
+    names = ["Telegram", "Gemini", "Groq", "OpenRouter", "Google Sheets"]
+    for name, res in zip(names, results):
+        status = "PASS" if res else "FAIL"
+        log(f"{name}: {status}")
+
+    with open("health_status.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(output_lines))
+        
     if passed == total:
-        print(f"\n{GREEN}{BOLD}✨ ALL SYSTEMS GO!{RESET}")
+        print(f"\n{GREEN}{BOLD}ALL SYSTEMS GO!{RESET}")
     else:
-        print(f"\n{YELLOW}{BOLD}⚠️ Some systems are offline or misconfigured.{RESET}")
+        print(f"\n{YELLOW}{BOLD}Some systems are offline or misconfigured.{RESET}")
 
 if __name__ == "__main__":
     asyncio.run(main())
