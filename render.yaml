@@ -17,9 +17,10 @@ services:
         sync: false
       - key: GOOGLE_SHEETS_CREDENTIALS_JSON
         sync: false
-      - key: KITE_API_KEY
-        sync: false
-      - key: KITE_ACCESS_TOKEN
-        sync: false
+
       - key: OPENROUTER_API_KEY
+        sync: false
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_SECRET_KEY
         sync: false

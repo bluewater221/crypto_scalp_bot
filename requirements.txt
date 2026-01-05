@@ -12,6 +12,6 @@ pandas_ta
 requests
 google-genai>=0.4.0
 groq
-kiteconnect
+
 packaging
 openai>=1.0.0

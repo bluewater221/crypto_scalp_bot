@@ -5,7 +5,7 @@ import yfinance as yf
 import config
 import logging
 import asyncio
-import kite_auth
+
 import nse_client
 import requests
 
@@ -16,9 +16,14 @@ def get_crypto_exchange():
     """Initialize the Binance exchange (Singapore server allows this)."""
     try:
         # Using Binance - Best liquidity, works in Singapore
-        exchange = ccxt.binance({
+        exchange_config = {
             'enableRateLimit': True,
-        })
+        }
+        if config.BINANCE_API_KEY and config.BINANCE_SECRET_KEY:
+            exchange_config['apiKey'] = config.BINANCE_API_KEY
+            exchange_config['secret'] = config.BINANCE_SECRET_KEY
+            
+        exchange = ccxt.binance(exchange_config)
         return exchange
     except Exception as e:
         logger.error(f"Error initializing crypto exchange: {e}")
@@ -42,16 +47,8 @@ async def fetch_crypto_ohlcv(exchange, symbol, timeframe=config.CRYPTO_TIMEFRAME
 async def fetch_stock_data(symbol, timeframe=config.STOCK_TIMEFRAME, period='5d'):
     """Fetch Intraday data from Kite (Best), NSE (Backup), or Yahoo (Default)."""
     
-    # 1. Try Kite (Best for Intraday)
-    try:
-        kite = kite_auth.KiteDataClient()
-        if kite.active:
-            # Run in thread to avoid blocking main loop
-            df = await asyncio.to_thread(kite.fetch_ohlc, symbol, timeframe, 5 if period=='5d' else 1)
-            if df is not None and not df.empty:
-                return df
-    except Exception as e:
-        logger.warning(f"Kite fetch failed for {symbol}: {e}")
+    # 1. Try Kite (Removed temporarily)
+
         
     # 2. Try NSEPython (Experimental - Often Daily only)
     # Scalping needs 5m data. NSEPython usually gives EOD. 
