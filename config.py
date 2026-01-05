@@ -43,21 +43,24 @@ ENABLE_SPOT_TRADING = False
 ENABLE_FUTURES_TRADING = True
 FUTURE_LEVERAGE = 5 # x5 Leverage
 MIN_TRADE_AMOUNT_CRYPTO = 5 # Binance Min
+
+# --- Crypto Pairs ---
+CRYPTO_PAIRS = [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT",
+    "XRP/USDT", "DOGE/USDT", "ADA/USDT", "AVAX/USDT",
+    "LINK/USDT", "LTC/USDT"
+]
+
 ENABLE_COMPOUNDING = True # Set to False to ALWAYS start with Initial Capital (Ignore History PnL)
 
 # --- Stock Configuration (Indian Markets) ---
 # NIFTY500 or selected highly liquid stocks. 
 # For demo, using a small list of liquid reliable stocks.
 STOCK_SYMBOLS = [
-    # --- Major Stocks ---
+    # --- Top Liquid Majors Only (Prevent Rate Limit) ---
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
     "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS", "LT.NS",
-    "AXISBANK.NS", "HINDUNILVR.NS", "MARUTI.NS", "TATASTEEL.NS", "M&M.NS",
-    "ASIANPAINT.NS", "TITAN.NS", "SUNPHARMA.NS", "BAJFINANCE.NS", "ULTRACEMCO.NS",
-    
-    # --- Midcap / Volatile (Good for Scalping) ---
-    "ADANIENT.NS", "ADANIPORTS.NS", "TATAMOTORS.NS", "VEDL.NS", "ZOMATO.NS",
-    "PAYTM.NS", "DLF.NS", "HAL.NS", "BEL.NS", "TRENT.NS"
+    "TATAMOTORS.NS", "ZOMATO.NS"
 ]
 
 STOCK_STOP_LOSS = 0.005 # 0.5%
