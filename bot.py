@@ -421,6 +421,21 @@ def main():
         application.add_handler(CommandHandler("market", market_command))
         application.add_handler(CommandHandler("verify", verify_command)) # Security & Health Check
 
+        # 3. Schedule Scalping Jobs
+        job_queue = application.job_queue
+        
+        # Crypto Scan
+        job_queue.run_repeating(scan_crypto, interval=config.CRYPTO_SCAN_INTERVAL, first=10)
+        logger.info(f"Scheduled Crypto Scan every {config.CRYPTO_SCAN_INTERVAL}s")
+        
+        # Stock Scan
+        job_queue.run_repeating(scan_stocks, interval=config.STOCK_SCAN_INTERVAL, first=15)
+        logger.info(f"Scheduled Stock Scan every {config.STOCK_SCAN_INTERVAL}s")
+
+        # Trade Manager (SL/TP Check) - Run frequently (e.g. every 30s)
+        job_queue.run_repeating(check_trades, interval=30, first=20)
+        logger.info("Scheduled Trade Manager (SL/TP) every 30s")
+
     # 4. Run Telegram Polling
         logger.info("Bot is running... Starting Polling.")
         application.run_polling()
@@ -520,3 +535,6 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     final_msg = "\n".join(report)
     await update.message.reply_text(final_msg, parse_mode='Markdown')
+
+if __name__ == '__main__':
+    main()
