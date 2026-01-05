@@ -307,6 +307,12 @@ async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
         logger.info("Crypto Market Closed. Skipping scan.")
         return
 
+    # User Request: Prioritize Stocks during Market Hours (Exclusive Mode)
+    # If the Indian Stock Market is OPEN, we skip Crypto to save resources/focus
+    if utils.is_market_open('STOCK'):
+        logger.info("🇮🇳 Stock Market Open. Pausing Crypto Scan to prioritize Stocks.")
+        return
+
     logger.info("Scanning CRYPTO...")
     
     # Check Balance (Will auto-credit if low)
@@ -353,6 +359,8 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
     failed_symbols = []
     
     for symbol in config.STOCK_SYMBOLS:
+        # Add delay between symbols to avoid rate limits
+        await asyncio.sleep(2)
         try:
             signal = await signals.analyze_stock(symbol)
             if signal:

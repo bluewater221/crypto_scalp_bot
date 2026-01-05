@@ -18,6 +18,10 @@ def is_market_open(market_type='CRYPTO'):
         return config.CRYPTO_MARKET_OPEN <= current_hour < config.CRYPTO_MARKET_CLOSE
         
     elif market_type == 'STOCK':
+        # Check Weekday (Mon=0, Sun=6)
+        if now_ist.weekday() >= 5: # Saturday (5) or Sunday (6)
+            return False
+
         # 9:15 AM to 3:30 PM
         current_time_minutes = current_hour * 60 + current_minute
         open_time = config.STOCK_MARKET_OPEN_HOUR * 60 + config.STOCK_MARKET_OPEN_MINUTE

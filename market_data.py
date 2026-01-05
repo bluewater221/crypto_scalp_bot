@@ -63,43 +63,68 @@ async def fetch_stock_data(symbol, timeframe=config.STOCK_TIMEFRAME, period='5d'
     #          if df is not None and not df.empty: return df
     # except: pass
 
-    try:
-        # 3. yfinance Fallback (Reliable Intraday)
-        # yfinance download is blocking, run in thread
-        df = await asyncio.to_thread(yf.download, tickers=symbol, period=period, interval=timeframe, progress=False)
-        
-        if df is None or df.empty:
-            logger.warning(f"No data returned for {symbol} - ticker may be delisted or symbol incorrect")
-            return None
+    # 3. yfinance Improvement (Session + Retry + Ticker.history)
+    max_retries = 3
+    base_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+             # Add random delay before request to mitigate rate limits
+            await asyncio.sleep(base_delay * (attempt + 1))
             
-        # Handle multi-index columns which occur in newer yfinance versions
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+            # Use Ticker.history with a custom session if possible, or just default
+            # Ticker.history is often more reliable for single symbols than download
+            
+            def get_data_sync():
+                ticker = yf.Ticker(symbol)
+                # history() doesn't officially support session in all versions, 
+                # but we can try to rely on Ticker's internal handling + delays.
+                return ticker.history(period=period, interval=timeframe)
 
-        df.reset_index(inplace=True)
-        # Standardize column names to lowercase
-        df.columns = [str(col).lower() for col in df.columns]
-        
-        # Validate we have required columns
-        required_cols = ['open', 'high', 'low', 'close', 'volume']
-        if not all(col in df.columns for col in required_cols):
-            logger.warning(f"Missing required columns for {symbol}. Got: {list(df.columns)}")
-            return None
-        
-        # Map timestamp
-        if 'datetime' in df.columns:
-            df.rename(columns={'datetime': 'timestamp'}, inplace=True)
-        elif 'date' in df.columns:
-            df.rename(columns={'date': 'timestamp'}, inplace=True)
+            df = await asyncio.to_thread(get_data_sync)
             
-        return df
-    except Exception as e:
-        error_msg = str(e).lower()
-        if 'delisted' in error_msg or 'no price data' in error_msg or 'no data found' in error_msg:
-            logger.warning(f"⚠️ Ticker {symbol} appears to be delisted or has no data - skipping")
-        else:
-            logger.error(f"Error fetching stock data for {symbol}: {e}")
-        return None
+            if df is None or df.empty:
+                logger.warning(f"Attempt {attempt+1}: No data for {symbol}")
+                continue
+
+            # Standardize Columns
+            df.reset_index(inplace=True)
+            df.columns = [str(col).lower() for col in df.columns]
+            
+            # Rename for consistency
+            rename_map = {
+                'date': 'timestamp', 
+                'datetime': 'timestamp',
+                'stock splits': 'splits'
+            }
+            df.rename(columns=rename_map, inplace=True)
+            
+            # Ensure Timestamp is localized/naive consistent if needed (usually fine)
+            
+            # Allow 'adj close' if 'close' missing (common in yf)
+            if 'close' not in df.columns and 'adj close' in df.columns:
+                 df['close'] = df['adj close']
+
+            required_cols = ['open', 'high', 'low', 'close', 'volume']
+            if not all(col in df.columns for col in required_cols):
+                 continue
+
+            return df
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if "rate limit" in error_str or "429" in error_str:
+                logger.warning(f"Rate limited on {symbol} (Attempt {attempt+1}/{max_retries}). Retrying...")
+                await asyncio.sleep(5) # Extra wait
+            elif "delisted" in error_str:
+                logger.warning(f"Ticker {symbol} seems delisted.")
+                return None
+            else:
+                 logger.error(f"Error fetching {symbol}: {e}")
+                 # Don't retry on unknown errors to avoid loops
+                 break
+    
+    return None
 
 # --- Indicator Calculation ---
 def calculate_indicators_crypto(df):
