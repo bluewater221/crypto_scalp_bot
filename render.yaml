@@ -21,3 +21,5 @@ services:
         sync: false
       - key: KITE_ACCESS_TOKEN
         sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false

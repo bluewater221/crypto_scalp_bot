@@ -93,7 +93,36 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
         except Exception as e:
             logger.warning(f"Gemini validation failed: {e}")
 
-    # Fallback after both fail
+    # 3. Try OpenRouter (Final Fallback)
+    openrouter_key = config.OPENROUTER_API_KEY
+    if openrouter_key:
+        try:
+             # Standard OpenAI-format call
+            from openai import OpenAI
+            client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=openrouter_key,
+            )
+            completion = await asyncio.to_thread(
+                client.chat.completions.create,
+                model="deepseek/deepseek-r1-distill-llama-70b", # Cost effective, high IQ
+                messages=[{"role": "user", "content": prompt}],
+                extra_headers={
+                   "HTTP-Referer": "https://github.com/crypto-scalp-bot", 
+                   "X-Title": "CryptoScalpBot"
+                 },
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(completion.choices[0].message.content)
+            return {
+                'confidence': f"{data.get('confidence', 0)}% (OR)",
+                'reasoning': data.get('reasoning', 'No reasoning'),
+                'verdict': data.get('verdict', 'APPROVED')
+            }
+        except Exception as e:
+            logger.warning(f"OpenRouter validation failed: {e}")
+
+    # Fallback after all fail
     return {'confidence': 'Error', 'reasoning': 'AI Unresponsive', 'verdict': 'APPROVED'}
 
 
