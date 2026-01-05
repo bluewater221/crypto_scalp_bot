@@ -25,8 +25,8 @@ GOOGLE_SHEETS_JSON = 'credentials.json' # File path or Env Var content
 GOOGLE_SHEET_NAME = "Scalper_Logs"
 
 # --- Trading Configuration ---
-CRYPTO_SCAN_INTERVAL = 60 # Seconds
-STOCK_SCAN_INTERVAL = 300 # Seconds
+CRYPTO_SCAN_INTERVAL = 120 # Seconds (2 mins) - Prevents scheduler overlap
+STOCK_SCAN_INTERVAL = 900 # Seconds (15 mins) - Reduces yfinance rate limits
 
 # Crypto Strategy (RSI Scalp)
 RSI_PERIOD = 14
