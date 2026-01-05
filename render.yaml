@@ -23,8 +23,6 @@ services:
         sync: false
       - key: TELEGRAM_LOG_CHANNEL_ID
         sync: false
-      - key: OPENROUTER_API_KEY
-        sync: false
       - key: KITE_API_KEY
         sync: false
       - key: KITE_ACCESS_TOKEN

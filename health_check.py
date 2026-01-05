@@ -140,7 +140,6 @@ async def main():
         await check_telegram(),
         await check_gemini(),
         await check_groq(),
-        await check_openrouter(),
         await check_google_sheets()
     ]
     
