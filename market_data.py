@@ -44,6 +44,19 @@ async def fetch_crypto_ohlcv(exchange, symbol, timeframe=config.CRYPTO_TIMEFRAME
         logger.error(f"Error fetching crypto data for {symbol}: {e}")
         return None
 
+async def fetch_crypto_candles_raw(exchange, symbol, timeframe=config.CRYPTO_TIMEFRAME, limit=100):
+    """
+    Fetch OHLCV data from Binance as RAW LIST (No Pandas).
+    Returns: List of [timestamp, open, high, low, close, volume]
+    """
+    try:
+        # Direct CCXT call, keeping it strictly as a list
+        bars = await asyncio.to_thread(exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit)
+        return bars
+    except Exception as e:
+        logger.error(f"Error fetching raw crypto data for {symbol}: {e}")
+        return None
+
 async def fetch_stock_data(symbol, timeframe=config.STOCK_TIMEFRAME, period='5d'):
     """Fetch Intraday data from Kite (Best), NSE (Backup), or Yahoo (Default)."""
     

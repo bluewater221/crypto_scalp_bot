@@ -97,3 +97,7 @@ STOCK_MARKET_CLOSE_MINUTE = 30
 STOCK_TIMEFRAME = '5m'
 
 
+
+# --- Webhook Settings ---
+WEBHOOK_PASSPHRASE = os.getenv("WEBHOOK_PASSPHRASE", "my_secret_passphrase")
+WATCHDOG_TIMEOUT = 1800 # 30 Minutes (Seconds)

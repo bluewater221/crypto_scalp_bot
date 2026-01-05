@@ -14,6 +14,10 @@ import telegram_handler
 import utils
 
 import trade_manager
+import trade_manager
+import gc
+import webhook_handler
+import time
 
 # Apply nest_asyncio to allow nested loops if needed (though PTB handles this well usually)
 nest_asyncio.apply()
@@ -25,6 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global Services
+SCAN_LOCK = asyncio.Lock()
 
 
 # Init Trade Managers
@@ -54,6 +59,7 @@ stock_mgr = trade_manager.TradeManager(
 
 # --- Flask Keep-Alive ---
 app_flask = Flask(__name__)
+app_flask.register_blueprint(webhook_handler.webhook_bp) # Register Webhook Listener
 
 @app_flask.route('/ping')
 def ping():
@@ -301,47 +307,75 @@ async def market_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Failed to fetch market data.")
 
 # --- Scanning Jobs ---
+MAX_CRYPTO_PAIRS = 20
+MAX_STOCK_SYMBOLS = 20
+
 async def scan_crypto(context: ContextTypes.DEFAULT_TYPE):
     """Scan Crypto Markets."""
     if not utils.is_market_open('CRYPTO'):
         logger.info("Crypto Market Closed. Skipping scan.")
         return
 
-    # User Request: Prioritize Stocks during Market Hours (Exclusive Mode)
-    # If the Indian Stock Market is OPEN, we skip Crypto to save resources/focus
-    if utils.is_market_open('STOCK'):
-        logger.info("🇮🇳 Stock Market Open. Pausing Crypto Scan to prioritize Stocks.")
+    # Watchdog Check: If Webhooks are active, PAUSE local scanning
+    # This saves massive CPU/RAM
+    time_since_webhook = time.time() - webhook_handler.last_webhook_time
+    if time_since_webhook < config.WATCHDOG_TIMEOUT:
+        if time_since_webhook < 120: # Log only occasionally
+            logger.info("🛑 Crypto Scan Paused: Webhook Mode Active.")
         return
 
-    logger.info("Scanning CRYPTO...")
-    
-    # Check Balance (Will auto-credit if low)
-    spot_mgr.check_balance_sufficiency()
-    future_mgr.check_balance_sufficiency()
+    # Hard Cap Check
+    if len(config.CRYPTO_PAIRS) > MAX_CRYPTO_PAIRS:
+        logger.warning(f"⚠️ Too many Crypto Pairs ({len(config.CRYPTO_PAIRS)}). Truncating to {MAX_CRYPTO_PAIRS} to save RAM.")
+        # Slice it locally for this scan (don't modify config permanently if not needed, but for safety lets iterate on slice)
+        scan_list = config.CRYPTO_PAIRS[:MAX_CRYPTO_PAIRS]
+    else:
+        scan_list = config.CRYPTO_PAIRS
 
-    exchange = market_data.get_crypto_exchange()
-    if not exchange: return
+    # Acquire Lock to prevent overlap with Stock Scan
+    if SCAN_LOCK.locked():
+        logger.warning("⚠️ Crypto Scan skipped: Locked by another process (Stock Scan?)")
+        return
 
-    for symbol in config.CRYPTO_PAIRS:
-        try:
-            signal = await signals.analyze_crypto(exchange, symbol)
-            if signal:
-                # Get current balance for recommendation logic
-                current_bal = spot_mgr.calculate_balance()
-                await telegram_handler.send_signal(context.bot, signal, 'CRYPTO', balance=current_bal)
-                
-                # Routing Logic
-                if signal['side'] == 'LONG':
-                    if config.ENABLE_SPOT_TRADING:
-                        await spot_mgr.open_trade(signal, context.bot)
-                    if config.ENABLE_FUTURES_TRADING:
-                        await future_mgr.open_trade(signal, context.bot)
-                elif signal['side'] == 'SHORT':
-                    if config.ENABLE_FUTURES_TRADING:
-                        await future_mgr.open_trade(signal, context.bot)
-                        
-        except Exception as e:
-            logger.error(f"Error scanning {symbol}: {e}")
+    async with SCAN_LOCK:
+        # User Request: Prioritize Stocks during Market Hours (Exclusive Mode)
+        # If the Indian Stock Market is OPEN, we skip Crypto to save resources/focus
+        if utils.is_market_open('STOCK'):
+            logger.info("🇮🇳 Stock Market Open. Pausing Crypto Scan to prioritize Stocks.")
+            return
+
+        logger.info("Scanning CRYPTO...")
+        
+        # Check Balance (Will auto-credit if low)
+        spot_mgr.check_balance_sufficiency()
+        future_mgr.check_balance_sufficiency()
+
+        exchange = market_data.get_crypto_exchange()
+        if not exchange: return
+
+        for symbol in scan_list:
+            try:
+                signal = await signals.analyze_crypto(exchange, symbol)
+                if signal:
+                    # Get current balance for recommendation logic
+                    current_bal = spot_mgr.calculate_balance()
+                    await telegram_handler.send_signal(context.bot, signal, 'CRYPTO', balance=current_bal)
+                    
+                    # Routing Logic
+                    if signal['side'] == 'LONG':
+                        if config.ENABLE_SPOT_TRADING:
+                            await spot_mgr.open_trade(signal, context.bot)
+                        if config.ENABLE_FUTURES_TRADING:
+                            await future_mgr.open_trade(signal, context.bot)
+                    elif signal['side'] == 'SHORT':
+                        if config.ENABLE_FUTURES_TRADING:
+                            await future_mgr.open_trade(signal, context.bot)
+                            
+            except Exception as e:
+                logger.error(f"Error scanning {symbol}: {e}")
+        
+        # Force Garbage Collection after scan cycle
+        gc.collect()
 
 async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
     """Scan Stock Markets."""
@@ -349,36 +383,56 @@ async def scan_stocks(context: ContextTypes.DEFAULT_TYPE):
         logger.info("Stock Market Closed. Skipping scan.")
         return
 
-    logger.info("Scanning STOCKS...")
-    
-    # Check Balance (Will auto-credit if low)
-    stock_mgr.check_balance_sufficiency()
+    # Watchdog Check
+    if time.time() - webhook_handler.last_webhook_time < config.WATCHDOG_TIMEOUT:
+        logger.info("🛑 Stock Scan Paused: Webhook Mode Active.")
+        return
 
-    success_count = 0
-    fail_count = 0
-    failed_symbols = []
+    # Acquire Lock
+    if SCAN_LOCK.locked():
+        logger.warning("⚠️ Stock Scan waiting for Lock...")
     
-    for symbol in config.STOCK_SYMBOLS:
-        # Add delay between symbols to avoid rate limits
-        await asyncio.sleep(2)
-        try:
-            signal = await signals.analyze_stock(symbol)
-            if signal:
-                # Get current balance for recommendation logic
-                current_bal = stock_mgr.calculate_balance()
-                await telegram_handler.send_signal(context.bot, signal, 'STOCK', balance=current_bal)
-                await stock_mgr.open_trade(signal, context.bot)
-            success_count += 1
-        except Exception as e:
-            fail_count += 1
-            failed_symbols.append(symbol)
-            logger.warning(f"Failed to scan {symbol}: {type(e).__name__}")
-    
-    # Log summary
-    if fail_count > 0:
-        logger.warning(f"Stock scan complete: {success_count} OK, {fail_count} failed: {', '.join(failed_symbols)}")
-    else:
-        logger.info(f"Stock scan complete: {success_count}/{len(config.STOCK_SYMBOLS)} symbols scanned")
+    async with SCAN_LOCK:
+        logger.info("Scanning STOCKS...")
+        
+        # Check Balance (Will auto-credit if low)
+        stock_mgr.check_balance_sufficiency()
+
+        success_count = 0
+        fail_count = 0
+        failed_symbols = []
+        
+        # Hard Cap Check
+        if len(config.STOCK_SYMBOLS) > MAX_STOCK_SYMBOLS:
+            logger.warning(f"⚠️ Too many Stock Symbols ({len(config.STOCK_SYMBOLS)}). Truncating to {MAX_STOCK_SYMBOLS}.")
+            scan_list = config.STOCK_SYMBOLS[:MAX_STOCK_SYMBOLS]
+        else:
+            scan_list = config.STOCK_SYMBOLS
+
+        for symbol in scan_list:
+            # Add delay between symbols to avoid rate limits
+            await asyncio.sleep(2)
+            try:
+                signal = await signals.analyze_stock(symbol)
+                if signal:
+                    # Get current balance for recommendation logic
+                    current_bal = stock_mgr.calculate_balance()
+                    await telegram_handler.send_signal(context.bot, signal, 'STOCK', balance=current_bal)
+                    await stock_mgr.open_trade(signal, context.bot)
+                success_count += 1
+            except Exception as e:
+                fail_count += 1
+                failed_symbols.append(symbol)
+                logger.warning(f"Failed to scan {symbol}: {type(e).__name__}")
+        
+        # Log summary
+        if fail_count > 0:
+            logger.warning(f"Stock scan complete: {success_count} OK, {fail_count} failed: {', '.join(failed_symbols)}")
+        else:
+            logger.info(f"Stock scan complete: {success_count}/{len(config.STOCK_SYMBOLS)} symbols scanned")
+
+        # Force Garbage Collection after scan cycle
+        gc.collect()
 
 # --- Trade Manager Job ---
 async def check_trades(context: ContextTypes.DEFAULT_TYPE):
@@ -386,6 +440,49 @@ async def check_trades(context: ContextTypes.DEFAULT_TYPE):
     await spot_mgr.update_trades(context.bot)
     await future_mgr.update_trades(context.bot)
     await stock_mgr.update_trades(context.bot)
+
+# --- Webhook Polling Job (The Bridge) ---
+async def check_webhooks(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Checks the synchronous pending_signals queue from webhook_handler.
+    Processes signals and clears the queue.
+    """
+    if not webhook_handler.pending_signals:
+        return
+
+    # Process all pending signals
+    while webhook_handler.pending_signals:
+        signal = webhook_handler.pending_signals.pop(0) # FIFO
+        logger.info(f"⚡ Processing Webhook Signal: {signal['symbol']} {signal['side']}")
+        
+        try:
+             # 1. Send Notification
+             # Get balance logic is tricky here if we want to be pure async
+             # Let's just pass None for balance to save DB calls overhead? 
+             # Or use the managers.
+             balance = None
+             if signal['market'] == 'CRYPTO':
+                 balance = spot_mgr.calculate_balance()
+             else:
+                 balance = stock_mgr.calculate_balance()
+                 
+             await telegram_handler.send_signal(context.bot, signal, signal['market'], balance=balance)
+
+             # 2. Open Trade
+             # Route based on market
+             if signal['market'] == 'CRYPTO':
+                 if signal['side'] == 'LONG':
+                     if config.ENABLE_SPOT_TRADING: await spot_mgr.open_trade(signal, context.bot)
+                     if config.ENABLE_FUTURES_TRADING: await future_mgr.open_trade(signal, context.bot)
+                 else:
+                     await future_mgr.open_trade(signal, context.bot)
+             else:
+                 await stock_mgr.open_trade(signal, context.bot)
+
+        except Exception as e:
+            logger.error(f"Failed to process webhook signal: {e}")
+
+# --- Main Entry Point ---
 
 
 
@@ -443,6 +540,11 @@ def main():
         # Trade Manager (SL/TP Check) - Run frequently (e.g. every 30s)
         job_queue.run_repeating(check_trades, interval=30, first=20)
         logger.info("Scheduled Trade Manager (SL/TP) every 30s")
+
+        # Webhook Consumer - Run very frequently (e.g. every 2s)
+        # This acts as the bridge between Flask and Telegram
+        job_queue.run_repeating(check_webhooks, interval=2, first=5)
+        logger.info("Scheduled Webhook Consumer every 2s")
 
     # 4. Run Telegram Polling
         logger.info("Bot is running... Starting Polling.")
