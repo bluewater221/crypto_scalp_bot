@@ -127,12 +127,12 @@ class TradeManager:
                 f"Balance: {self.currency}{balance:,.2f}"
             )
             
-            # Route to PnL Channel
+            # Route to Main Channel
             channel_id = None
             if 'CRYPTO' in trade['market']:
-                channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID
+                channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
             elif trade['market'] == 'STOCK':
-                channel_id = config.TELEGRAM_STOCK_PNL_CHANNEL_ID
+                channel_id = config.TELEGRAM_STOCK_CHANNEL_ID
             
             if channel_id:
                 try:
@@ -274,23 +274,12 @@ class TradeManager:
             f"Entry: {entry} | Exit: {close_price}"
         )
         
-        # Route to PnL Channel
+        # Route to Main Channel (Consolidated)
         channel_id = None
         if 'CRYPTO' in trade['market']:
-            channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID
+             channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
         elif trade['market'] == 'STOCK':
-             channel_id = config.TELEGRAM_STOCK_PNL_CHANNEL_ID
-             
-        # Fallback to generic Log Channel or Signal Channel if PnL channel is missing
-        if not channel_id:
-            channel_id = config.TELEGRAM_LOG_CHANNEL_ID
-        
-        # Final Fallback: Send to the Main Signal Channel (so checking PnL is possible)
-        if not channel_id:
-             if 'CRYPTO' in trade['market']:
-                channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
-             else:
-                channel_id = config.TELEGRAM_STOCK_CHANNEL_ID
+             channel_id = config.TELEGRAM_STOCK_CHANNEL_ID
 
         if channel_id:
              asyncio.create_task(bot.send_message(chat_id=channel_id, text=msg, parse_mode='Markdown'))

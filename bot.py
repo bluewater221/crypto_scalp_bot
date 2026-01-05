@@ -519,8 +519,8 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Balance: $10.00"
         )
         
-        # Send to PnL Channel
-        channel_id = config.TELEGRAM_CRYPTO_PNL_CHANNEL_ID or config.TELEGRAM_CRYPTO_CHANNEL_ID
+        # Send to Main Channel
+        channel_id = config.TELEGRAM_CRYPTO_CHANNEL_ID
         if channel_id:
             await context.bot.send_message(chat_id=channel_id, text=msg, parse_mode='Markdown')
             report.append("✅ Test Notification Sent to Channel")
