@@ -58,6 +58,21 @@ class TradeManager:
             except Exception as e:
                 logger.error(f"Failed to save {self.trades_file}: {e}")
 
+    
+    def determine_session(self):
+        """Returns the current market session based on UTC time."""
+        # Simple heuristic:
+        # Asia: 00-08 UTC (5:30am - 1:30pm IST)
+        # London: 08-16 UTC (1:30pm - 9:30pm IST)
+        # NY: 13-21 UTC (6:30pm - 2:30am IST)
+        # Note: London/NY Overlap is 13-16 UTC
+        now_utc = datetime.now(timezone.utc).hour
+        if 8 <= now_utc < 13: return 'LONDON'
+        if 13 <= now_utc < 16: return 'LOND/NY'
+        if 16 <= now_utc < 21: return 'NY'
+        if 0 <= now_utc < 8: return 'ASIA'
+        return 'OVERNIGHT'
+
     async def open_trade(self, signal_data, bot=None):
         """register a new trade for this specific manager."""
         # Risk Pct
@@ -78,6 +93,8 @@ class TradeManager:
             'tp': signal_data['take_profit'],
             'sl': signal_data['stop_loss'],
             'status': 'OPEN',
+            'session': self.determine_session(),
+            'setup': signal_data.get('setup', 'Standard'),
             'open_time': signal_data['timestamp'],
             'risk_pct': risk_pct
         }
@@ -116,7 +133,7 @@ class TradeManager:
             msg = (
                 f"{side_emoji} **TRADE OPENED: {trade['symbol']}**\n"
                 f"Side: {trade['side']} | Market: {market_display}\n"
-                f"📅 **Time**: {ist_now} IST\n\n"
+                f"📅 **Time**: {ist_now} IST ({trade['session']})\n\n"
                 f"📊 **Entry Details**\n"
                 f"Entry: {self.currency}{entry:,.4f}\n"
                 f"Take Profit: {self.currency}{tp:,.4f} (+{((tp-entry)/entry)*100:.2f}%)\n"

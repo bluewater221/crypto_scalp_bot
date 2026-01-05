@@ -80,7 +80,7 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
         try:
             response = await asyncio.to_thread(
                 gemini.models.generate_content,
-                model='gemini-2.0-flash',
+                model='gemini-flash-latest',
                 contents=prompt
             )
             raw_text = response.text.replace('```json', '').replace('```', '').strip()
@@ -148,6 +148,15 @@ async def analyze_crypto(exchange, symbol, df_1m=None, df_5m=None):
     
     df_5m['ema_20'] = ta.ema(df_5m['close'], length=20)
     df_5m['ema_50'] = ta.ema(df_5m['close'], length=50)
+    
+    # VWAP Calculation (using pandas_ta)
+    # vwap requires high, low, close, volume and dataframe index to be datetime (which it is)
+    df_5m.set_index('timestamp', inplace=True)
+    df_5m['vwap'] = ta.vwap(df_5m['high'], df_5m['low'], df_5m['close'], df_5m['volume'])
+    df_5m.reset_index(inplace=True)
+    
+    # Volume MA for Spike Detection
+    df_5m['vol_ma_20'] = ta.sma(df_5m['volume'], length=20)
 
     # Latest Values
     curr_1m = df_1m.iloc[-1]
@@ -155,42 +164,48 @@ async def analyze_crypto(exchange, symbol, df_1m=None, df_5m=None):
     
     curr_5m = df_5m.iloc[-1]
     
-    # --- HTF TREND FILTER (5m) ---
+    # --- HTF TREND & CONFIRMATION FILTER (5m) ---
     trend_5m = 'BULLISH' if curr_5m['ema_20'] > curr_5m['ema_50'] else 'BEARISH'
+    
+    # VWAP Filter
+    last_price = curr_1m['close']
+    current_vwap = curr_5m['vwap']
+    price_vs_vwap = 'ABOVE' if last_price > current_vwap else 'BELOW'
+    
+    # 1. Volume Spike Check on 1m (Active Volume)
+    # Using 1m Volume > 20-period 1m Volume MA
+    df_1m['vol_ma_20'] = ta.sma(df_1m['volume'], length=20)
+    curr_1m_vol_ma = df_1m['vol_ma_20'].iloc[-1]
+    
+    # Require current volume to be at least greater than the regular average
+    vol_spike = curr_1m['volume'] > curr_1m_vol_ma
+    
+    logger.info(f"{symbol} | Trend: {trend_5m} | VWAP: {price_vs_vwap} | Spiking: {vol_spike} | RSI: {curr_1m['rsi']:.2f}")
 
     signal = None
     setup_type = ""
     entry_price = curr_1m['close']
-    
-    # Calculate Crypto Volume Average (20 period)
-    vol_avg = df_1m['volume'].rolling(window=20).mean().iloc[-1]
-    vol_curr = curr_1m['volume']
-    
-    # Volume Check (Mandatory for both)
-    # Volume > 1.2x Average
-    volume_ok = vol_curr > (1.2 * vol_avg)
 
     # --- LONG LOGIC ---
-    if trend_5m == 'BULLISH' and volume_ok:
+    # 1. 5m Trend Bullish OR Mean Reversion possibility? User wants strictness.
+    # Logic: Uptrend + Price Above VWAP + Volume Spike + RSI Reversal
+    if trend_5m == 'BULLISH' and price_vs_vwap == 'ABOVE' and vol_spike:
         # 1. RSI Crosses back ABOVE 30
         if prev_1m['rsi'] < 30 and curr_1m['rsi'] >= 30:
-            # 2. Price > 1m EMA 20
-            if entry_price > curr_1m['ema_20']:
-                signal = 'LONG'
-                setup_type = 'RSI Reversal (w/ 5m Trend)'
-                stop_loss = entry_price * (1 - 0.003) # 0.3% Fixed
-                take_profit = entry_price * (1 + 0.005) # 0.5% Target
+            signal = 'LONG'
+            setup_type = 'RSI_Reversal_VWAP_Trend'
+            stop_loss = entry_price * (1 - 0.003) # 0.3% Fixed
+            take_profit = entry_price * (1 + 0.005) # 0.5% Target
 
     # --- SHORT LOGIC ---
-    elif trend_5m == 'BEARISH' and volume_ok:
+    # Logic: Downtrend + Price Below VWAP + Volume Spike
+    elif trend_5m == 'BEARISH' and price_vs_vwap == 'BELOW' and vol_spike:
         # 1. RSI Crosses back BELOW 70
         if prev_1m['rsi'] > 70 and curr_1m['rsi'] <= 70:
-            # 2. Price < 1m EMA 20
-            if entry_price < curr_1m['ema_20']:
-                signal = 'SHORT'
-                setup_type = 'RSI Reversal (w/ 5m Trend)'
-                stop_loss = entry_price * (1 + 0.003)
-                take_profit = entry_price * (1 - 0.005)
+            signal = 'SHORT'
+            setup_type = 'RSI_Reversal_VWAP_Trend'
+            stop_loss = entry_price * (1 + 0.003)
+            take_profit = entry_price * (1 - 0.005)
 
     if signal:
         # Check if Backtesting (exchange is None) to skip AI

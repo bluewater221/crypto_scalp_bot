@@ -14,15 +14,19 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 BACKTEST_DAYS = 30
-CRYPTO_TIMEFRAME = '1m'
+CRYPTO_TIMEFRAME = '5m'
 STOCK_TIMEFRAME = '5m'
 
 async def fetch_historical_crypto(symbol, limit_days=BACKTEST_DAYS):
-    """Fetches historical OHLCV data for Crypto from Kraken."""
-    exchange = ccxt.kraken()
+    """Fetches historical OHLCV data for Crypto from Binance."""
+    exchange_config = {'enableRateLimit': True}
+    if config.BINANCE_API_KEY and config.BINANCE_SECRET_KEY:
+        exchange_config['apiKey'] = config.BINANCE_API_KEY
+        exchange_config['secret'] = config.BINANCE_SECRET_KEY
+    exchange = ccxt.binance(exchange_config)
     try:
         since = exchange.parse8601((datetime.now(timezone.utc) - timedelta(days=limit_days)).isoformat())
-        ohlcv = await exchange.fetch_ohlcv(symbol, CRYPTO_TIMEFRAME, since)
+        ohlcv = await exchange.fetch_ohlcv(symbol, CRYPTO_TIMEFRAME, since, limit=1000)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df

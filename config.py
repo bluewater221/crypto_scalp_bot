@@ -22,7 +22,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") # Fallback AI
 
 # Google Sheets
 GOOGLE_SHEETS_JSON = 'credentials.json' # File path or Env Var content
-GOOGLE_SHEET_NAME = "ScalpBot_DB"
+GOOGLE_SHEET_NAME = "Scalper_Logs"
 
 # --- Trading Configuration ---
 CRYPTO_SCAN_INTERVAL = 60 # Seconds
