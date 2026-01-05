@@ -57,10 +57,8 @@ ENABLE_COMPOUNDING = True # Set to False to ALWAYS start with Initial Capital (I
 # NIFTY500 or selected highly liquid stocks. 
 # For demo, using a small list of liquid reliable stocks.
 STOCK_SYMBOLS = [
-    # --- Top Liquid Majors Only (Prevent Rate Limit) ---
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
-    "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS", "LT.NS",
-    "TATAMOTORS.NS", "ZOMATO.NS"
+    "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS", "LT.NS"
 ]
 
 STOCK_STOP_LOSS = 0.005 # 0.5%
