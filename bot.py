@@ -12,7 +12,7 @@ import signals
 
 import telegram_handler
 import utils
-import news_manager
+
 import trade_manager
 
 # Apply nest_asyncio to allow nested loops if needed (though PTB handles this well usually)
@@ -25,8 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global Services
-# Global Services
-news_service = news_manager.NewsManager()
+
 
 # Init Trade Managers
 spot_mgr = trade_manager.TradeManager(
@@ -114,8 +113,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📊 **Market Data**\n"
         "/price <symbol> - Get current price\n"
         "  _Examples: /price BTC, /price RELIANCE_\n\n"
-        "📰 **News**\n"
-        "/news - Get latest market news now\n\n"
         "📈 **Trading**\n"
         "/stats - View performance stats\n"
         "/test - Check bot status\n\n"
@@ -258,50 +255,7 @@ async def fetch_stock_price(update: Update, stock_symbol: str):
     )
     await update.message.reply_text(msg, parse_mode='Markdown')
 
-async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Manually trigger news fetch and send to user."""
-    await update.message.reply_text("📰 Fetching latest news...")
-    
-    try:
-        # Fetch news
-        stock_news = await news_service.fetch_stock_news()
-        crypto_news = news_service.fetch_crypto_news()
-        
-        total = len(stock_news) + len(crypto_news)
-        
-        if total == 0:
-            await update.message.reply_text("No new news found. Check back later!")
-        else:
-            # Send news to channels
-            for item in stock_news:
-                await telegram_handler.send_news(context.bot, item, 'STOCK')
-            for item in crypto_news:
-                await telegram_handler.send_news(context.bot, item, 'CRYPTO')
-            
-            await update.message.reply_text(f"✅ Sent {total} news items to channels!")
-            
-    except Exception as e:
-        logger.error(f"Error in news command: {e}")
-        await update.message.reply_text(f"❌ Error fetching news: {str(e)}")
 
-async def airdrops_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Manually trigger airdrop fetch and send to user."""
-    await update.message.reply_text("🪂 Checking for latest airdrops...")
-    
-    try:
-        airdrops = await news_service.fetch_airdrop_opportunities()
-        
-        if not airdrops:
-            await update.message.reply_text("No new airdrops found. Check back later!")
-        else:
-            for item in airdrops:
-                await telegram_handler.send_airdrop(context.bot, item)
-            
-            await update.message.reply_text(f"✅ Sent {len(airdrops)} airdrop alerts to the channel!")
-            
-    except Exception as e:
-        logger.error(f"Error in airdrops command: {e}")
-        await update.message.reply_text(f"❌ Error fetching airdrops: {str(e)}")
 
 async def market_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show global market sentiment."""
@@ -425,38 +379,7 @@ async def check_trades(context: ContextTypes.DEFAULT_TYPE):
     await future_mgr.update_trades(context.bot)
     await stock_mgr.update_trades(context.bot)
 
-# --- News Job ---
-# news_service is global
-async def check_news(context: ContextTypes.DEFAULT_TYPE):
-    """Checks for news updates."""
-    logger.info("Checking for NEWS...")
-    
-    # 1. Stock News
-    # News can happen anytime, not just during market hours
-    try:
-        stock_news = await news_service.fetch_stock_news()
-        for item in stock_news:
-            await telegram_handler.send_news(context.bot, item, 'STOCK')
-    except Exception as e:
-        logger.error(f"Stock news fetch failed: {e}")
-            
-    # 2. Crypto News (Always open)
-    crypto_news = news_service.fetch_crypto_news()
-    for item in crypto_news:
-        await telegram_handler.send_news(context.bot, item, 'CRYPTO')
 
-    # 3. Expert Charts (CoinTelegraph RSS)
-    chart_news = news_service.fetch_expert_analysis()
-    for item in chart_news:
-        await telegram_handler.send_news(context.bot, item, 'CRYPTO')
-
-async def check_airdrops(context: ContextTypes.DEFAULT_TYPE):
-    """Checks for airdrop updates."""
-    logger.info("Checking for AIRDROPS...")
-    airdrops = await news_service.fetch_airdrop_opportunities()
-    
-    for item in airdrops:
-        await telegram_handler.send_airdrop(context.bot, item)
 
 
 
@@ -494,8 +417,7 @@ def main():
         application.add_handler(CommandHandler("id", id_command))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("price", price_command))
-        application.add_handler(CommandHandler("news", news_command))
-        application.add_handler(CommandHandler("airdrops", airdrops_command))
+
         application.add_handler(CommandHandler("market", market_command))
         application.add_handler(CommandHandler("verify", verify_command)) # Security & Health Check
 

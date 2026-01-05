@@ -15,7 +15,7 @@ TELEGRAM_LOG_CHANNEL_ID = os.getenv("TELEGRAM_LOG_CHANNEL_ID") # Optional
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") # Fallback
-CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY")
+
 
 # Google Sheets
 GOOGLE_SHEETS_JSON = 'credentials.json' # File path or Env Var content
@@ -24,8 +24,6 @@ GOOGLE_SHEET_NAME = "ScalpBot_DB"
 # --- Trading Configuration ---
 CRYPTO_SCAN_INTERVAL = 60 # Seconds
 STOCK_SCAN_INTERVAL = 300 # Seconds
-NEWS_CHECK_INTERVAL = 3600 # 1 Hour
-AIRDROP_CHECK_INTERVAL = 21600 # 6 Hours
 
 # Crypto Strategy (RSI Scalp)
 RSI_PERIOD = 14

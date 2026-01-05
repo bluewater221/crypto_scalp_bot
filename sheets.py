@@ -170,42 +170,4 @@ def fetch_trade_history():
         logger.error(f"Failed to fetch trade history: {e}")
         return []
 
-def fetch_seen_news():
-    """Fetches all seen news/airdrop IDs from 'Seen_News' sheet."""
-    client = get_gspread_client()
-    if not client: return set()
 
-    try:
-        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
-        try:
-            sheet = sh.worksheet("Seen_News")
-        except:
-            return set()
-
-        # Get all IDs from the first column
-        ids = sheet.col_values(1)
-        # Skip header if present
-        if ids and ids[0] == "NewsID":
-            ids = ids[1:]
-        return set(ids)
-    except Exception as e:
-        logger.error(f"Failed to fetch seen news: {e}")
-        return set()
-
-def log_seen_news(news_id):
-    """Logs a seen news ID to the 'Seen_News' sheet."""
-    client = get_gspread_client()
-    if not client: return
-
-    try:
-        sh = open_spreadsheet(client, config.GOOGLE_SHEET_NAME)
-        try:
-            sheet = sh.worksheet("Seen_News")
-        except:
-            sheet = sh.add_worksheet(title="Seen_News", rows="5000", cols="2")
-            sheet.append_row(["NewsID", "LoggedAt"])
-        
-        from datetime import datetime
-        sheet.append_row([str(news_id), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-    except Exception as e:
-        logger.error(f"Failed to log seen news: {e}")

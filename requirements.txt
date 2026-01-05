@@ -6,16 +6,12 @@ pandas>=2.2.0
 gspread>=6.0.0
 oauth2client
 python-dotenv
-Pillow
 flask
 nest_asyncio
 pandas_ta
 requests
-feedparser
-textblob
 google-genai>=0.4.0
 groq
 kiteconnect
-lxml>=4.9.0
 packaging
 openai>=1.0.0

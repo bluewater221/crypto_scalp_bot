@@ -132,25 +132,6 @@ async def check_google_sheets():
         # print(traceback.format_exc()) # Uncomment for full debug
         return False
 
-async def check_cryptopanic():
-    print(f"\n{BOLD}--- CryptoPanic Check ---{RESET}")
-    if not config.CRYPTOPANIC_API_KEY:
-        print(f"{YELLOW}[WARN] CRYPTOPANIC_API_KEY not found. (Skipping){RESET}")
-        return False
-    try:
-        # Correct API endpoint for news
-        url = f"https://cryptopanic.com/api/v1/posts/?auth_token={config.CRYPTOPANIC_API_KEY}&kind=news&public=true"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            print(f"{GREEN}[OK] CryptoPanic API is working.{RESET}")
-            return True
-        else:
-            print(f"{RED}[FAIL] CryptoPanic Error: {response.status_code} - {response.text}{RESET}")
-            return False
-    except Exception as e:
-        print(f"{RED}[FAIL] CryptoPanic Exception: {e}{RESET}")
-        return False
-
 async def main():
     print(f"\n{BOLD}🚀 Starting API Health Check for Crypto Bot...{RESET}\n")
     
@@ -160,8 +141,7 @@ async def main():
         await check_gemini(),
         await check_groq(),
         await check_openrouter(),
-        await check_google_sheets(),
-        await check_cryptopanic()
+        await check_google_sheets()
     ]
     
     print(f"\n{BOLD}--- Execution Summary ---{RESET}")

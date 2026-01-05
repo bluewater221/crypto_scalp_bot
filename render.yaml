@@ -15,8 +15,6 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: CRYPTOPANIC_API_KEY
-        sync: false
       - key: GOOGLE_SHEETS_CREDENTIALS_JSON
         sync: false
       - key: TELEGRAM_CRYPTO_PNL_CHANNEL_ID
