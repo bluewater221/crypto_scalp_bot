@@ -438,7 +438,9 @@ def main():
 
     # 4. Run Telegram Polling
         logger.info("Bot is running... Starting Polling.")
-        application.run_polling()
+        # Drop pending updates to avoid processing old messages on restart
+        # allowed_updates ensures we capture everything
+        application.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
         
     except Exception as e:
         logger.critical(f"🔥 FATAL CRASH IN MAIN: {e}", exc_info=True)
