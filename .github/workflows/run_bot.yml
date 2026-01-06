@@ -1,9 +1,9 @@
 name: Run Crypto Scalp Bot
 
-on:
-  schedule:
-    - cron: '0 */4 * * *' # Run every 4 hours (Analyst Job)
-  workflow_dispatch: # Allow manual trigger
+# on:
+#   schedule:
+#     - cron: '0 */4 * * *' # Run every 4 hours (Analyst Job)
+#   workflow_dispatch: # Allow manual trigger
 
 jobs:
   run-bot:
