@@ -21,7 +21,8 @@ async def test_signals():
         return
 
     # specific_pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
-    specific_pairs = config.CRYPTO_PAIRS[:3] # Test first 3
+    # specific_pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+    specific_pairs = config.CRYPTO_PAIRS # Test ALL configured pairs
 
     for symbol in specific_pairs:
         print(f"\nAnalyzing {symbol}...")

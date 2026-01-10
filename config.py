@@ -30,13 +30,14 @@ STOCK_SCAN_INTERVAL = 900 # Seconds (15 mins) - Reduces yfinance rate limits
 
 # Crypto Strategy (RSI Scalp)
 RSI_PERIOD = 14
-RSI_OVERSOLD = 30
-RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 50
+RSI_OVERBOUGHT = 50
+REQUIRE_VOLUME_SPIKE = False # Set to True to enforce Volume > 20 SMA
 CRYPTO_STOP_LOSS = 0.005 # 0.5%
 CRYPTO_TAKE_PROFIT = 0.01 # 1%
 CRYPTO_RISK_PER_TRADE = 0.95 # 95% Risk for micro account (5 USDT) to ensure trade size > minimum
 INITIAL_CAPITAL_CRYPTO = 10 # USD (User Real Balance) - Default
-CRYPTO_TIMEFRAME = '1m' # Default timeframe for scalping
+CRYPTO_TIMEFRAME = '5m' # 5m Timeframe for Manual Execution (Option C)
 INITIAL_CAPITAL_CRYPTO_SPOT = 10 # USD
 INITIAL_CAPITAL_CRYPTO_FUTURE = 10 # USD
 ENABLE_SPOT_TRADING = False
@@ -48,7 +49,8 @@ MIN_TRADE_AMOUNT_CRYPTO = 5 # Binance Min
 CRYPTO_PAIRS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT",
     "XRP/USDT", "DOGE/USDT", "ADA/USDT", "AVAX/USDT",
-    "LINK/USDT", "LTC/USDT"
+    "LINK/USDT", "LTC/USDT", "DOT/USDT", "UNI/USDT",
+    "NEAR/USDT", "APT/USDT", "FIL/USDT"
 ]
 
 ENABLE_COMPOUNDING = True # Set to False to ALWAYS start with Initial Capital (Ignore History PnL)
