@@ -32,7 +32,7 @@ def get_groq_client():
         _groq_client = Groq(api_key=config.GROQ_API_KEY)
     return _groq_client
 
-async def validate_with_ai(symbol, market_type, signal, setup, df):
+async def validate_with_ai(symbol, market_type, signal, setup, df, context_summary=None):
     """
     Asks AI (Gemini or Groq) to validate the technical signal.
     """
@@ -43,8 +43,11 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
         return {'confidence': 'N/A', 'reasoning': 'AI Keys missing', 'verdict': 'APPROVED'}
 
     # Technical Context
+    # Technical Context
     if df is not None:
         recent_data = df.tail(5).to_string()
+    elif context_summary:
+        recent_data = context_summary
     else:
         recent_data = "Data unavailable (Zero-Pandas Mode)"
     prompt = (
@@ -129,89 +132,124 @@ async def validate_with_ai(symbol, market_type, signal, setup, df):
     return {'confidence': 'Error', 'reasoning': 'AI Unresponsive', 'verdict': 'APPROVED'}
 
 
-async def analyze_crypto(exchange, symbol, raw_1m=None, raw_5m=None):
+async def analyze_crypto(exchange, symbol, raw_candles=None, raw_htf_candles=None):
     """
-    Analyzes a crypto symbol for RSI scalping signals (Strict 1m Scalp).
+    Analyzes a crypto symbol for RSI scalping signals.
+    Uses config.CRYPTO_TIMEFRAME for execution (e.g., 5m) and 15m for Trend.
     ZERO-PANDAS IMPLEMENTATION (List/NumPy only).
     """
-    # 1. Fetch 1m Data (Execution Timeframe)
-    if raw_1m is None:
-        raw_1m = await market_data.fetch_crypto_candles_raw(exchange, symbol, timeframe='1m')
-    if not raw_1m or len(raw_1m) < 50: return None
+    # 1. Fetch Execution Data (e.g. 5m)
+    if raw_candles is None:
+        raw_candles = await market_data.fetch_crypto_candles_raw(exchange, symbol, timeframe=config.CRYPTO_TIMEFRAME)
+    if not raw_candles or len(raw_candles) < 50: 
+        logger.debug(f"{symbol}: Not enough execution data ({len(raw_candles) if raw_candles else 0})")
+        return None
 
-    # 2. Fetch 5m Data (HTF Trend Filter)
-    if raw_5m is None:
-        raw_5m = await market_data.fetch_crypto_candles_raw(exchange, symbol, timeframe='5m')
-    if not raw_5m or len(raw_5m) < 50: return None
+    # 2. Fetch HTF Data (Trend Filter - 15m)
+    if raw_htf_candles is None:
+        # If execution is 5m, use 15m for trend. If execution is 1m, maybe 5m.
+        # Hardcoding 15m as 'HTF' for the 5m Strategy (Option C).
+        htf_frame = '15m'
+        raw_htf_candles = await market_data.fetch_crypto_candles_raw(exchange, symbol, timeframe=htf_frame)
+    if not raw_htf_candles or len(raw_htf_candles) < 50: 
+        logger.debug(f"{symbol}: Not enough HTF data ({len(raw_htf_candles) if raw_htf_candles else 0})")
+        return None
 
-    # Extract Lists for Calculation
-    # Structure: [timestamp, open, high, low, close, volume]
+    # Extract Lists
     
-    # 1m Data
-    closes_1m = [x[4] for x in raw_1m]
-    vols_1m = [x[5] for x in raw_1m]
+    # Execution Data
+    closes = [x[4] for x in raw_candles]
+    vols = [x[5] for x in raw_candles]
     
-    # 5m Data
-    highs_5m = [x[2] for x in raw_5m]
-    lows_5m = [x[3] for x in raw_5m]
-    closes_5m = [x[4] for x in raw_5m]
-    vols_5m = [x[5] for x in raw_5m]
+    # HTF Data
+    highs_htf = [x[2] for x in raw_htf_candles]
+    lows_htf = [x[3] for x in raw_htf_candles]
+    closes_htf = [x[4] for x in raw_htf_candles]
+    vols_htf = [x[5] for x in raw_htf_candles]
 
-    # --- Indicators (Lightweight) ---
+    # --- Indicators ---
     
-    # 1m Indicators
-    rsi_1m_curr = utils.calculate_rsi(closes_1m, period=14)
-    # Ensure we get prev RSI correctly. 
-    # Calculate for array excluding last element? Or sliding window?
-    # Simple trick: calc RSI on array[:-1] to get prev value
-    rsi_1m_prev = utils.calculate_rsi(closes_1m[:-1], period=14)
+    # Execution Indicators
+    rsi_curr = utils.calculate_rsi(closes, period=config.RSI_PERIOD)
+    rsi_series = utils.calculate_rsi_series(closes, period=config.RSI_PERIOD) # For lookback
     
     # Vol Spike
-    vol_1m_curr = vols_1m[-1]
-    vol_ma_20_1m = utils.calculate_sma(vols_1m, period=20)
-    vol_spike = vol_1m_curr > vol_ma_20_1m if vol_ma_20_1m else False
+    vol_curr = vols[-1]
+    vol_ma_20 = utils.calculate_sma(vols, period=20)
 
-    # 5m Indicators (Trend)
-    ema_20_5m = utils.calculate_ema(closes_5m, period=20)
-    ema_50_5m = utils.calculate_ema(closes_5m, period=50)
-    vwap_5m = utils.calculate_vwap(highs_5m, lows_5m, closes_5m, vols_5m)
+    # HTF Indicators (Trend)
+    ema_20_htf = utils.calculate_ema(closes_htf, period=20)
+    ema_50_htf = utils.calculate_ema(closes_htf, period=50)
+    vwap_htf = utils.calculate_vwap(highs_htf, lows_htf, closes_htf, vols_htf)
     
-    # Current Values
-    close_1m_curr = closes_1m[-1]
+    # Current Close
+    close_curr = closes[-1]
     
-    # --- HTF TREND & CONFIRMATION FILTER (5m) ---
-    if ema_20_5m is None or ema_50_5m is None: return None
+    # --- HTF TREND & CONFIRMATION FILTER ---
+    if ema_20_htf is None or ema_50_htf is None: return None
     
-    trend_5m = 'BULLISH' if ema_20_5m > ema_50_5m else 'BEARISH'
+    trend_htf = 'BULLISH' if ema_20_htf > ema_50_htf else 'BEARISH'
     
-    # VWAP Filter
-    price_vs_vwap = 'ABOVE' if close_1m_curr > vwap_5m else 'BELOW'
+    # VWAP Filter (Using Latest)
+    price_vs_vwap = 'ABOVE' if close_curr > vwap_htf else 'BELOW'
     
-    logger.info(f"{symbol} | Trend: {trend_5m} | VWAP: {price_vs_vwap} | Spiking: {vol_spike} | RSI: {rsi_1m_curr:.2f}")
+    rsi_curr = rsi_series[-1]
 
-    signal = None
-    setup_type = ""
-    entry_price = close_1m_curr
+    # Lookback logic
+    valid_signal_found = False
+    
+    lookback = 10
+    for i in range(1, lookback + 1):
+        idx_curr = -i
+        idx_prev = -(i + 1)
+        
+        if abs(idx_prev) > len(rsi_series): break
+        
+        r_curr = rsi_series[idx_curr]
+        r_prev = rsi_series[idx_prev]
+        
+        v_c = vols[idx_curr]
+        v_ma_val = utils.calculate_sma(vols[:idx_curr], period=20)
+        
+        # Check volume spike only if required by config
+        v_spike = True
+        if config.REQUIRE_VOLUME_SPIKE:
+            v_spike = v_c > v_ma_val if v_ma_val else False
+        
+        # Determine specific signal time logic
+        # LONG
+        if trend_htf == 'BULLISH' and price_vs_vwap == 'ABOVE' and v_spike:
+            if r_prev < config.RSI_OVERSOLD and r_curr >= config.RSI_OVERSOLD:
+                signal = 'LONG'
+                setup_type = f'RSI_Reversal_VWAP_Trend (Candle -{i})'
+                entry_price = closes[idx_curr]
+                stop_loss = entry_price * (1 - config.CRYPTO_STOP_LOSS)
+                take_profit = entry_price * (1 + config.CRYPTO_TAKE_PROFIT)
+                valid_signal_found = True
+                break
+            else:
+                # Debug logging for rejection
+                logger.debug(f"{symbol} C-{i}: T={trend_htf} V={price_vs_vwap} S={v_spike} | RSI {r_prev:.1f}->{r_curr:.1f} | REJECTED: RSI Cond")
+        
+        # SHORT
+        elif trend_htf == 'BEARISH' and price_vs_vwap == 'BELOW' and v_spike:
+            if r_prev > config.RSI_OVERBOUGHT and r_curr <= config.RSI_OVERBOUGHT:
+                signal = 'SHORT'
+                setup_type = f'RSI_Reversal_VWAP_Trend (Candle -{i})'
+                entry_price = closes[idx_curr]
+                stop_loss = entry_price * (1 + config.CRYPTO_STOP_LOSS)
+                take_profit = entry_price * (1 - config.CRYPTO_TAKE_PROFIT)
+                valid_signal_found = True
+                break
+            else:
+                 logger.debug(f"{symbol} C-{i}: T={trend_htf} V={price_vs_vwap} S={v_spike} | RSI {r_prev:.1f}->{r_curr:.1f} | REJECTED: RSI Cond")
+        else:
+             logger.debug(f"{symbol} C-{i}: T={trend_htf} V={price_vs_vwap} S={v_spike} | RSI {r_prev:.1f}->{r_curr:.1f} | REJECTED: Setup Cond")
 
-    # --- LONG LOGIC ---
-    if trend_5m == 'BULLISH' and price_vs_vwap == 'ABOVE' and vol_spike:
-        # 1. RSI Crosses back ABOVE 30
-        # Prev < 30 AND Curr >= 30
-        if rsi_1m_prev < 30 and rsi_1m_curr >= 30:
-            signal = 'LONG'
-            setup_type = 'RSI_Reversal_VWAP_Trend_Light'
-            stop_loss = entry_price * (1 - 0.003) # 0.3% Fixed
-            take_profit = entry_price * (1 + 0.005) # 0.5% Target
-
-    # --- SHORT LOGIC ---
-    elif trend_5m == 'BEARISH' and price_vs_vwap == 'BELOW' and vol_spike:
-        # 1. RSI Crosses back BELOW 70
-        # Prev > 70 AND Curr <= 70
-        if rsi_1m_prev > 70 and rsi_1m_curr <= 70:
-            signal = 'SHORT'
-            setup_type = 'RSI_Reversal_VWAP_Trend_Light'
-            stop_loss = entry_price * (1 + 0.003)
-            take_profit = entry_price * (1 - 0.005)
+    if valid_signal_found:
+        pass # Signal set variables above
+    else:
+        signal = None
 
     if signal:
         # Check if Backtesting (exchange is None) to skip AI
@@ -238,19 +276,9 @@ async def analyze_crypto(exchange, symbol, raw_1m=None, raw_5m=None):
         # Let's mock a simple dict for context.
         
         # Simple context string
-        context_str = f"Last 5 candles (Close): {closes_1m[-5:]} | RSI: {rsi_1m_curr:.2f}"
+        context_str = f"Last 5 Candles (Close): {closes[-5:]} | RSI(14): {rsi_curr:.2f} | Trend: {trend_htf} | VWAP: {price_vs_vwap} | Volume Spike: {v_spike}"
         
-        # We need to refactor validate_with_ai to handle 'None' DF or just create a minimal dummy?
-        # Creating a dummy DF brings pandas back.
-        # Let's assume validate_with_ai handles non-df gracefully or we patch it.
-        # Actually signals.py:validate_with_ai uses `df.tail(5).to_string()`. This will crash if None.
-        
-        # Quick Fix: Don't call Validate with AI for now or patch `validate_with_ai` to handle list?
-        # User said "AI Validation" is nice. 
-        # I will create a fake DF-like string manually.
-        
-        # Manually formatting context
-        ai_data = await validate_with_ai(symbol, 'CRYPTO', signal, setup_type, None) # Passing None
+        ai_data = await validate_with_ai(symbol, 'CRYPTO', signal, setup_type, None, context_summary=context_str) # Passing Context String
         
         if ai_data.get('verdict') == 'REJECTED':
             logger.info(f"🚫 AI Rejected Signal for {symbol}: {ai_data['reasoning']}")
@@ -291,89 +319,64 @@ async def analyze_stock(symbol, df=None):
     # Need enough data for checks
     if len(df) < 20: return None
         
-    curr = df.iloc[-1]
-    prev = df.iloc[-2]
-    
-    close_price = curr['close']
-    
-    # Extract Indicators
-    ema_fast = curr.get('ema_fast')
-    ema_slow = curr.get('ema_slow')
-    ema_trend = curr.get('ema_trend')
-    ema_slope = curr.get('ema_trend_slope', 0)
-    adx = curr.get('adx', 0)
-    # Check ADX Rising: ADX[now] > ADX[prev] > ADX[prev-1]
-    adx_prev = prev.get('adx', 0)
-    
-    rsi = curr.get('rsi')
-    vol_curr = curr.get('volume')
-    vol_avg = curr.get('vol_avg')
-    vol_prev = prev.get('volume')
-    
-    # Validate Data Availability
-    vals_to_check = [ema_fast, ema_slow, ema_trend, rsi, vol_curr, vol_avg]
-    if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in vals_to_check):
-        return None
+    # Lookback loop for Stocks (Check last 4 candles)
+    if len(df) < 5: return None
     
     signal = None
-    setup_type = ""
     
-    # --- STRICT ENTRY CONDITIONS (LONG ONLY) ---
-    
-    # SHIELD 1: Momentum Signal (Primary)
-    # EMA 9 Cross Above 21 (Golden Cross)
-    cross_signal = (ema_fast > ema_slow) and (prev['ema_fast'] <= prev['ema_slow'])
-    
-    # Separation Check: EMA difference > X% of Price (Avoid noise)
-    separation = (ema_fast - ema_slow) / close_price
-    has_separation = separation >= config.EMA_CROSS_THRESHOLD
-    
-    # Candle must close above BOTH EMAs
-    closes_above_emas = (close_price > ema_fast) and (close_price > ema_slow)
-    
-    if cross_signal and has_separation and closes_above_emas:
+    for i in range(1, 5):
+        # Index -i is Candidate, -(i+1) is Prev
+        curr = df.iloc[-i]
+        prev = df.iloc[-(i+1)]
         
-        # SHIELD 2: Trend
-        # Price > EMA 50 AND EMA 50 Slope is Positive
-        trend_ok = (close_price > ema_trend) and (ema_slope > 0)
+        close_price = curr['close']
         
-        # SHIELD 3: Strength
-        # ADX > 20 AND Rising AND < 40
-        strength_ok = (adx > config.ADX_MIN) and (adx > adx_prev) and (adx < config.ADX_MAX)
+        # Extract Indicators for this candle
+        ema_fast = curr.get('ema_fast')
+        ema_slow = curr.get('ema_slow')
+        ema_trend = curr.get('ema_trend')
+        ema_slope = curr.get('ema_trend_slope', 0)
+        adx = curr.get('adx', 0)
+        adx_prev = prev.get('adx', 0)
         
-        # SHIELD 4: Safety (Momentum Zone)
-        # RSI between 45 and 65
-        momentum_ok = (rsi >= config.RSI_MIN) and (rsi <= config.RSI_MAX)
+        rsi = curr.get('rsi')
+        vol_curr = curr.get('volume')
+        vol_avg = curr.get('vol_avg')
+        vol_prev = prev.get('volume')
         
-        # SHIELD 5: Volume Confirmation
-        # Vol > 1.2x Avg AND Vol > Prev Vol
-        volume_ok = (vol_curr > (1.2 * vol_avg)) and (vol_curr > vol_prev)
+        vals_to_check = [ema_fast, ema_slow, ema_trend, rsi, vol_curr, vol_avg]
+        if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in vals_to_check):
+            continue
+
+        # SHIELD 1: Momentum Signal (Primary)
+        cross_signal = (ema_fast > ema_slow) and (prev['ema_fast'] <= prev['ema_slow'])
+        separation = (ema_fast - ema_slow) / close_price
+        has_separation = separation >= config.EMA_CROSS_THRESHOLD
+        closes_above_emas = (close_price > ema_fast) and (close_price > ema_slow)
         
-        if trend_ok and strength_ok and momentum_ok and volume_ok:
-            signal = 'LONG'
-            setup_type = f'5-Shield Sniper (ADX:{adx:.1f} RSI:{rsi:.1f})'
-            entry_price = close_price
+        if cross_signal and has_separation and closes_above_emas:
+            trend_ok = (close_price > ema_trend) and (ema_slope > 0)
+            strength_ok = (adx > config.ADX_MIN) and (adx > adx_prev) and (adx < config.ADX_MAX)
+            momentum_ok = (rsi >= config.RSI_MIN) and (rsi <= config.RSI_MAX)
+            volume_ok = (vol_curr > (1.2 * vol_avg)) and (vol_curr > vol_prev)
             
-            # Auto Stop Loss logic: Tighter of (21 EMA - 0.05%) OR Fixed %
-            # Prompt Reqs: "Tighter of Recent Swing Low or 21 EMA - 0.05%"
-            # Implementing 21 EMA SL logic
-            sl_ema = ema_slow * (1 - 0.0005) # 21 EMA - 0.05%
-            sl_fixed = entry_price * (1 - config.STOCK_STOP_LOSS)
-            
-            # Use the higher value (tighter SL for Longs)
-            stop_loss = max(sl_ema, sl_fixed)
-            
-            # Target: 1.5R Minimum
-            risk = entry_price - stop_loss
-            take_profit = entry_price + (1.5 * risk)
-        else:
-            # Log specific rejections for debugging loop
-            reasons = []
-            if not trend_ok: reasons.append("Trend/Slope")
-            if not strength_ok: reasons.append("ADX")
-            if not momentum_ok: reasons.append("RSI")
-            if not volume_ok: reasons.append("Volume")
-            logger.debug(f"{symbol} Signal REJECTED. Shields failed: {', '.join(reasons)}")
+            if trend_ok and strength_ok and momentum_ok and volume_ok:
+                signal = 'LONG'
+                setup_type = f'5-Shield Sniper (Candle -{i})'
+                entry_price = close_price
+                sl_ema = ema_slow * (1 - 0.0005)
+                sl_fixed = entry_price * (1 - config.STOCK_STOP_LOSS)
+                stop_loss = max(sl_ema, sl_fixed)
+                risk = entry_price - stop_loss
+                take_profit = entry_price + (1.5 * risk)
+                break # Stop at most recent signal
+            else:
+                reasons = []
+                if not trend_ok: reasons.append("Trend/Slope")
+                if not strength_ok: reasons.append("ADX")
+                if not momentum_ok: reasons.append("RSI")
+                if not volume_ok: reasons.append("Volume")
+                logger.debug(f"{symbol} Candle -{i} Signal REJECTED. Shields failed: {', '.join(reasons)}")
 
     
     if signal:
@@ -411,7 +414,6 @@ async def analyze_stock(symbol, df=None):
             'risk_pct': config.STOCK_RISK_PER_TRADE,
             'timestamp': utils.get_ist_time().strftime('%Y-%m-%d %H:%M:%S'),
             'ai_confidence': ai_data['confidence'],
-            'ai_reasoning': ai_data['reasoning'],
             'ai_reasoning': ai_data['reasoning'],
             'df': None # Memory Optimization: Dropped DataFrame
         }

@@ -18,6 +18,7 @@ def get_crypto_exchange():
         # Using Binance - Best liquidity, works in Singapore
         exchange_config = {
             'enableRateLimit': True,
+            'timeout': 30000,
         }
         if config.BINANCE_API_KEY and config.BINANCE_SECRET_KEY:
             exchange_config['apiKey'] = config.BINANCE_API_KEY
